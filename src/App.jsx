@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
+import Auth from './Auth'; // استدعاء صفحة تسجيل الدخول
+import { auth } from './firebase'; // استدعاء إعدادات قاعدة البيانات
+import { onAuthStateChanged, signOut } from 'firebase/auth'; // أدوات تسجيل الدخول والخروج
+import { LogOut } from 'lucide-react'; // أيقونة الخروج
 import { 
   Home, CalendarHeart, Users, Wallet, Store, 
   Globe, Plus, Trash2, CheckCircle, Clock, MapPin, 
@@ -223,6 +227,52 @@ const generateWithGemini = async (prompt) => {
 };
 
 export default function App() {
+  // -- الأكواد الجديدة الخاصة بالمصادقة --
+  const [user, setUser] = useState(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  // هذا الكود يشتغل أول ما يفتح التطبيق عشان يتأكد إذا المستخدم مسجل دخول من قبل
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setIsAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // دالة تسجيل الخروج
+  const handleLogout = () => {
+    signOut(auth);
+  };
+
+  const [profileInfo, setProfileInfo] = useState({
+    username: '',
+    email: '',
+    phone: '',
+    bio: ''
+  });
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isProfileEditMode, setIsProfileEditMode] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setProfileInfo((prev) => ({
+        username: user.displayName || user.email?.split('@')[0] || 'ضيفنا',
+        email: user.email || '',
+        phone: prev.phone,
+        bio: prev.bio
+      }));
+    }
+  }, [user]);
+
+  const handleProfileInfoChange = (field, value) => {
+    setProfileInfo((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleProfileSave = (e) => {
+    e.preventDefault();
+    setIsProfileEditMode(false);
+  };
   // 1. ALL HOOKS DECLARED AT THE TOP LEVEL
   const [lang, setLang] = useState('ar');
   const [isSetupComplete, setIsSetupComplete] = useState(false);
@@ -310,47 +360,6 @@ export default function App() {
     { id: 'budget', icon: <Wallet size={20} />, label: t.budget },
   ];
 
-  // 4. EARLY RETURNS
-  if (!isSetupComplete) {
-    return (
-      <div dir={isRtl ? 'rtl' : 'ltr'} className={`min-h-screen bg-amber-50 flex items-center justify-center p-4 font-sans ${isRtl ? 'font-arabic' : ''}`}>
-        <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full border border-amber-100">
-          <div className="text-center mb-8">
-             <CalendarHeart size={48} className="text-amber-500 mx-auto mb-4" />
-             <h1 className="text-3xl font-extrabold text-amber-900 mb-2">{t.appName}</h1>
-             <p className="text-gray-500 font-medium">{t.welcomeSetup}</p>
-          </div>
-          
-          <form onSubmit={handleSetupSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">{t.groomName}</label>
-              <input type="text" name="groom" required className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-gray-50" placeholder="عمر" />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">{t.brideName}</label>
-              <input type="text" name="bride" required className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-gray-50" placeholder="فاطمة" />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">{t.weddingDate}</label>
-              <input type="date" name="date" min={todayStr} required className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-gray-50" />
-            </div>
-             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">{t.initialBudget} ({t.currency})</label>
-              <input type="number" name="budget" required min="0" className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-gray-50" placeholder="2500000" />
-            </div>
-            <button type="submit" className="w-full bg-amber-600 text-white font-bold text-lg py-3 rounded-xl hover:bg-amber-700 transition shadow-lg mt-4">
-              {t.startPlanning}
-            </button>
-          </form>
-          <div className="mt-6 text-center">
-             <button onClick={toggleLang} className="text-sm text-gray-500 hover:text-amber-600 underline decoration-dotted">
-                {lang === 'ar' ? 'Switch to English' : 'التبديل للعربية'}
-             </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // 5. INNER COMPONENTS RENDERING LOGIC
   const DashboardTab = () => {
@@ -702,30 +711,178 @@ export default function App() {
       </div>
     );
   };
+  // -- التحقق قبل عرض التطبيق --
+  
+  // 1. إذا كان التطبيق لسه يتأكد من حالة المستخدم، نعرض شاشة تحميل بسيطة
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#fdfbf7]">
+        <div className="text-amber-600 font-bold text-2xl animate-pulse">جاري التحميل... ⏳</div>
+      </div>
+    );
+  }
+
+  // 2. إذا لم يكن هناك مستخدم مسجل، نعرض صفحة تسجيل الدخول
+  if (!user) {
+    return <Auth onLoginSuccess={() => console.log('تم تسجيل الدخول بنجاح')} />;
+  }
+  // 4. EARLY RETURNS
+  if (!isSetupComplete) {
+    return (
+      <div dir={isRtl ? 'rtl' : 'ltr'} className={`min-h-screen bg-amber-50 flex items-center justify-center p-4 font-sans ${isRtl ? 'font-arabic' : ''}`}>
+        <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full border border-amber-100">
+          <div className="text-center mb-8">
+             <CalendarHeart size={48} className="text-amber-500 mx-auto mb-4" />
+             <h1 className="text-3xl font-extrabold text-amber-900 mb-2">{t.appName}</h1>
+             <p className="text-gray-500 font-medium">{t.welcomeSetup}</p>
+          </div>
+          
+          <form onSubmit={handleSetupSubmit} className="space-y-5">
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">{t.groomName}</label>
+              <input type="text" name="groom" required className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-gray-50" placeholder="عمر" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">{t.brideName}</label>
+              <input type="text" name="bride" required className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-gray-50" placeholder="فاطمة" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">{t.weddingDate}</label>
+              <input type="date" name="date" min={todayStr} required className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-gray-50" />
+            </div>
+             <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">{t.initialBudget} ({t.currency})</label>
+              <input type="number" name="budget" required min="0" className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-gray-50" placeholder="2500000" />
+            </div>
+            <button type="submit" className="w-full bg-amber-600 text-white font-bold text-lg py-3 rounded-xl hover:bg-amber-700 transition shadow-lg mt-4">
+              {t.startPlanning}
+            </button>
+          </form>
+          <div className="mt-6 text-center">
+             <button onClick={toggleLang} className="text-sm text-gray-500 hover:text-amber-600 underline decoration-dotted">
+                {lang === 'ar' ? 'Switch to English' : 'التبديل للعربية'}
+             </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // 6. MAIN RENDER
   return (
     <div dir={isRtl ? 'rtl' : 'ltr'} className={`min-h-screen bg-[#fdfbf7] font-sans ${isRtl ? 'font-arabic' : ''}`}>
       
       {/* Navigation */}
-      <nav className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
+      <nav className="relative bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between h-16 items-center">
+            {/* Left: Profile & Mobile Menu */}
             <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsProfileMenuOpen((open) => !open)}
+                className="flex items-center gap-3 rounded-full border border-gray-200 bg-white px-2 py-1 hover:shadow-sm transition"
+              >
+                <div className="h-10 w-10 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center justify-center">
+                  {profileInfo.username ? profileInfo.username[0].toUpperCase() : 'U'}
+                </div>
+                <div className="hidden sm:flex flex-col text-left">
+                  <span className="text-sm font-semibold text-gray-800">{profileInfo.username || 'ضيفنا'}</span>
+                  <span className="text-xs text-gray-500 truncate">{profileInfo.email || t.appName}</span>
+                </div>
+              </button>
               {/* زر القائمة المخصص للجوال فقط */}
               <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="md:hidden text-amber-700 p-1 hover:bg-amber-50 rounded-lg transition">
                 {isMobileMenuOpen ? <X size={26} /> : <Menu size={26} />}
               </button>
-              
-              <div className="flex items-center gap-2 text-amber-700 font-extrabold text-2xl">
-                <CalendarHeart size={28} className="text-amber-500 hidden sm:block" />
-                <span>{t.appName}</span>
-              </div>
             </div>
             
-             <button onClick={toggleLang} className="flex items-center gap-2 text-sm font-bold text-gray-600 hover:text-amber-700 bg-gray-100 px-4 py-2 rounded-full transition">
+            {/* Center: App Logo & Name */}
+            <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-2 text-amber-700 font-extrabold text-2xl">
+              <CalendarHeart size={28} className="text-amber-500 hidden sm:block" />
+              <span>{t.appName}</span>
+            </div>
+            
+            {/* Right: Language Switch */}
+            <button onClick={toggleLang} className="flex items-center gap-2 text-sm font-bold text-gray-600 hover:text-amber-700 bg-gray-100 px-4 py-2 rounded-full transition">
               <Globe size={16} /> {t.switchLang}
             </button>
         </div>
+        {isProfileMenuOpen && (
+          <div className={`absolute ${isRtl ? 'right-4' : 'left-4'} top-full mt-2 w-80 rounded-3xl bg-white border border-gray-200 shadow-2xl z-40 overflow-hidden`}>
+            {!isProfileEditMode ? (
+              <>
+                <div className="p-4 border-b border-gray-100 flex justify-between items-start">
+                  <div className="flex items-center gap-3">
+                    <div className="h-12 w-12 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center justify-center">
+                      {profileInfo.username ? profileInfo.username[0].toUpperCase() : 'U'}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900">{profileInfo.username || 'ضيفنا'}</p>
+                      <p className="text-xs text-gray-500 truncate">{profileInfo.email || 'لا يوجد بريد إلكتروني'}</p>
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => setIsProfileEditMode(true)} className="px-3 py-1 bg-amber-100 text-amber-700 font-bold text-xs rounded-full hover:bg-amber-200 transition">
+                    {isRtl ? 'تعديل' : 'Edit'}
+                  </button>
+                </div>
+                <div className="p-4 space-y-3">
+                  <div>
+                    <p className="text-xs font-bold text-gray-500 mb-1">{isRtl ? 'الهاتف' : 'Phone'}</p>
+                    <p className="text-sm text-gray-800">{profileInfo.phone || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-gray-500 mb-1">{isRtl ? 'معلومات إضافية' : 'Bio'}</p>
+                    <p className="text-sm text-gray-800">{profileInfo.bio || '-'}</p>
+                  </div>
+                </div>
+                <div className="border-t border-gray-100 p-4">
+                  <button onClick={handleLogout} className="w-full px-3 py-2 text-sm font-semibold text-red-600 rounded-2xl border border-red-100 hover:bg-red-50 transition">
+                    {isRtl ? 'تسجيل الخروج' : 'Logout'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <form onSubmit={handleProfileSave} className="p-4 space-y-3">
+                <h3 className="font-bold text-gray-800 text-sm mb-3">{isRtl ? 'تعديل البيانات' : 'Edit Profile'}</h3>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">{isRtl ? 'اسم المستخدم' : 'Username'}</label>
+                  <input
+                    type="text"
+                    value={profileInfo.username}
+                    onChange={(e) => handleProfileInfoChange('username', e.target.value)}
+                    className="w-full border border-gray-200 rounded-2xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">{isRtl ? 'الهاتف' : 'Phone'}</label>
+                  <input
+                    type="text"
+                    value={profileInfo.phone}
+                    onChange={(e) => handleProfileInfoChange('phone', e.target.value)}
+                    className="w-full border border-gray-200 rounded-2xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">{isRtl ? 'معلومات إضافية' : 'Bio'}</label>
+                  <textarea
+                    value={profileInfo.bio}
+                    onChange={(e) => handleProfileInfoChange('bio', e.target.value)}
+                    rows={3}
+                    className="w-full border border-gray-200 rounded-2xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <button type="button" onClick={() => setIsProfileEditMode(false)} className="flex-1 px-3 py-2 text-sm font-semibold text-gray-600 rounded-2xl border border-gray-200 hover:bg-gray-50 transition">
+                    {t.cancel}
+                  </button>
+                  <button type="submit" className="flex-1 px-3 py-2 text-sm font-semibold text-white rounded-2xl bg-amber-600 hover:bg-amber-700 transition">
+                    {t.save}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
       </nav>
 
       {/* القائمة المنسدلة للجوال */}
