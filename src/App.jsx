@@ -703,18 +703,50 @@ export default function App() {
   // 6. MAIN RENDER
   return (
     <div dir={isRtl ? 'rtl' : 'ltr'} className={`min-h-screen bg-[#fdfbf7] font-sans ${isRtl ? 'font-arabic' : ''}`}>
+      
       {/* Navigation */}
       <nav className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between h-16 items-center">
-            <div className="flex items-center gap-2 text-amber-700 font-extrabold text-2xl">
-              <CalendarHeart size={28} className="text-amber-500" />
-              <span>{t.appName}</span>
+            <div className="flex items-center gap-3">
+              {/* زر القائمة المخصص للجوال فقط */}
+              <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="md:hidden text-amber-700 p-1 hover:bg-amber-50 rounded-lg transition">
+                {isMobileMenuOpen ? <X size={26} /> : <Menu size={26} />}
+              </button>
+              
+              <div className="flex items-center gap-2 text-amber-700 font-extrabold text-2xl">
+                <CalendarHeart size={28} className="text-amber-500 hidden sm:block" />
+                <span>{t.appName}</span>
+              </div>
             </div>
+            
              <button onClick={toggleLang} className="flex items-center gap-2 text-sm font-bold text-gray-600 hover:text-amber-700 bg-gray-100 px-4 py-2 rounded-full transition">
               <Globe size={16} /> {t.switchLang}
             </button>
         </div>
       </nav>
+
+      {/* القائمة المنسدلة للجوال */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" style={{ top: '64px' }} onClick={() => setIsMobileMenuOpen(false)}>
+          <div className={`bg-white h-full w-64 shadow-2xl p-5 ${isRtl ? 'float-right' : 'float-left'} overflow-y-auto`} onClick={e => e.stopPropagation()}>
+            <ul className="space-y-2">
+              {navItems.map((item) => (
+                <li key={item.id}>
+                  <button
+                    onClick={() => { setActiveTab(item.id); setIsMobileMenuOpen(false); }}
+                    className={`w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl transition-all ${
+                      activeTab === item.id ? 'bg-gradient-to-r from-amber-50 to-orange-50 text-amber-700 font-black' : 'text-gray-500 font-bold hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className={activeTab === item.id ? 'text-amber-600' : 'text-gray-400'}>{item.icon}</div>
+                    <span>{item.label}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
 
       {/* Main Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex gap-8">
