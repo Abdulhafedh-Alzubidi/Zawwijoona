@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { 
   Home, CalendarHeart, Users, Wallet, Store, 
   Globe, Plus, Trash2, CheckCircle, Clock, MapPin, 
@@ -1055,5 +1056,8 @@ export default function App() {
         </button>
       </div>
     </div>
+
+    {/* أداة قياس السرعة من فيرسيل */}
+      <SpeedInsights />
   );
 }
