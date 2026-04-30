@@ -7,6 +7,8 @@ import {
   MessageCircle, Send, Upload, FileSpreadsheet
 } from 'lucide-react';
 
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+console.log("My API Key is ready!");
 // --- Dictionary for Bilingual Support ---
 const dict = {
   ar: {
@@ -1055,9 +1057,8 @@ export default function App() {
           {isChatOpen ? <X size={26} /> : <MessageCircle size={26} />}
         </button>
       </div>
+      {/* أداة قياس السرعة من فيرسيل */}
+      <SpeedInsights/>
     </div>
-
-    {/* أداة قياس السرعة من فيرسيل */}
-      <SpeedInsights />
   );
 }
