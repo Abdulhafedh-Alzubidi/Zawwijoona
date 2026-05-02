@@ -4,7 +4,6 @@ import Auth from './Auth'; // استدعاء صفحة تسجيل الدخول
 import { auth, db } from './firebase'; // استدعاء إعدادات قاعدة البيانات
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth'; // أدوات تسجيل الدخول والخروج
-import { LogOut } from 'lucide-react'; // أيقونة الخروج
 import {
   Home, CalendarHeart, Users, Wallet, Store,
   Globe, Plus, Trash2, CheckCircle, Clock, MapPin,

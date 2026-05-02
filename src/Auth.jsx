@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import  { useState } from 'react';
 import { auth } from './firebase'; // نستدعي إعدادات فايربيس اللي سويناها
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { Mail, Lock, AlertCircle, User } from 'lucide-react';
