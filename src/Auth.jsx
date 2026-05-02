@@ -3,7 +3,7 @@ import { auth } from './firebase'; // نستدعي إعدادات فايربيس
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { Mail, Lock, AlertCircle, User } from 'lucide-react';
 
-export default function Auth({ onLoginSuccess }) {
+export default function Auth({ onLoginSuccess, toggleLang, isRtl }) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -120,6 +120,16 @@ export default function Auth({ onLoginSuccess }) {
         </form>
 
         <div className="mt-8 text-center">
+          <div className="mt-6 text-center border-t border-gray-100 pt-4">
+            <button
+              type="button"
+              onClick={toggleLang}
+              className="text-sm font-medium text-gray-500 hover:text-gray-800 transition-colors underline underline-offset-4"
+            >
+              {isRtl ? 'Switch to English' : 'التبديل إلى العربية'}
+
+            </button>
+          </div>
           <p className="text-gray-600 font-medium">
             {isLogin ? 'ليس لديك حساب؟ ' : 'لديك حساب بالفعل؟ '}
             <button
