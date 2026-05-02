@@ -11,8 +11,6 @@ import {
   MessageCircle, Send, Upload, FileSpreadsheet
 } from 'lucide-react';
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-console.log("GEMINI KEY STATUS:", GEMINI_API_KEY ? "Key NOT FOUND" : "Key Missing! Please set VITE_GEMINI_API_KEY in .env file.");
 // --- Dictionary for Bilingual Support ---
 const dict = {
   ar: {
@@ -213,13 +211,13 @@ const dict = {
 };
 
 // --- Gemini API Helper (Replace with your actual key) ---
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+const apiKey = "AIzaSyBwwxUPnYV_Me6fkvQMFguPWyB2FyZrm6g";
 const generateWithGemini = async (prompt) => {
   if (!apiKey) {
     console.warn("Gemini API key is missing. Simulating response.");
     return new Promise(resolve => setTimeout(() => resolve("Simulated AI response. Please add your API key to src/App.jsx."), 1500));
   }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`;
   const payload = { contents: [{ parts: [{ text: prompt }] }] };
 
   let retries = 5;
