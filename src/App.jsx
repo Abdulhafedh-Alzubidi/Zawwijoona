@@ -304,19 +304,25 @@ export default function App() {
     setProfileInfo((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleProfileSave = async (e) => {
-
-  // إرسال بيانات الحساب لقاعدة البيانات (Firestore)
+  const handleProfileSave = async () => {
+  console.log("1. تم الضغط على زر الحفظ!"); // إذا ما طلعت هذي، يعني الزر مفصول
+  
   if (user) {
+    console.log("2. المستخدم موجود، جاري الحفظ في فايربيس...");
     try {
       const userDocRef = doc(db, 'users', user.uid);
       await setDoc(userDocRef, {
-        profile: profileInfo // هذا المتغير يحتوي على الاسم، الجوال، والبايو
+        profile: profileInfo
       }, { merge: true });
-      console.log("تم حفظ بيانات الحساب بنجاح! 👤");
+      
+      console.log("3. تم الحفظ في فايربيس بنجاح! 👤", profileInfo);
+      setIsProfileEditMode(false); 
+      
     } catch (error) {
       console.error("خطأ في حفظ بيانات الحساب:", error);
     }
+  } else {
+    console.log("❌ خطأ: المتغير user غير موجود أو لم يتم تسجيل الدخول!");
   }
 };
   // 1. ALL HOOKS DECLARED AT THE TOP LEVEL
@@ -922,7 +928,7 @@ export default function App() {
           </button>
         </div>
         {isProfileMenuOpen && (
-          <div className={`absolute ${isRtl ? 'right-4' : 'left-4'} top-full mt-2 w-80 rounded-3xl bg-white border border-gray-200 shadow-2xl z-40 overflow-hidden`} onClick={(e) => e.stopPropagation()}>
+          <div className={`absolute ${isRtl ? 'right-4' : 'left-4'} top-full mt-2 w-80 rounded-3xl bg-white border border-gray-200 shadow-2xl z-40 overflow-hidden`} onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
             {!isProfileEditMode ? (
               <div>
                 <div className="p-4 border-b border-gray-100 flex justify-between items-start">
@@ -962,7 +968,7 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              <form onSubmit={handleProfileSave} className="p-4 space-y-3">
+              <form className="p-4 space-y-3">
                 <h3 className="font-bold text-gray-800 text-sm mb-3">{isRtl ? 'تعديل البيانات' : 'Edit Profile'}</h3>
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1">{isRtl ? 'اسم المستخدم' : 'Username'}</label>
@@ -996,7 +1002,7 @@ export default function App() {
                     {t.cancel}
                   </button>
                   <button type="button" onClick={handleProfileSave} className="flex-1 px-3 py-2 text-sm font-semibold text-white rounded-2xl bg-amber-600 hover:bg-amber-700 transition">
-                    {t.save}
+                    {isRtl ? 'حفظ' : 'Save'}
                   </button>
                 </div>
               </form>
@@ -1052,7 +1058,7 @@ export default function App() {
         {/* Content */}
         <main className="flex-1 min-w-0 pb-12">
           {activeTab === 'dashboard' && <DashboardTab />}
-          {activeTab === 'planning' && <PlanningTab />}
+          {activeTab === 'planning' && PlanningTab()}
           {activeTab === 'guests' && <GuestsTab />}
           {activeTab === 'budget' && <BudgetTab />}
           {activeTab === 'team' && <TeamTab />}
