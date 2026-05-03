@@ -441,6 +441,59 @@ export default function App() {
     fetchUserData();
   }, [user]); // هذا القوس يعني: "شغّل هذا الكود كلما تغيرت حالة المستخدم (تسجيل دخول/خروج)"
 
+  const saveUserField = async (field, value) => {
+    if (!user) return;
+    try {
+      const userDocRef = doc(db, 'users', user.uid);
+      await setDoc(userDocRef, { [field]: value }, { merge: true });
+    } catch (error) {
+      console.error(`خطأ في حفظ ${field} في فايربيس:`, error);
+    }
+  };
+
+  const handleDeleteGuest = async (guestId) => {
+    const updatedGuests = guests.filter((g) => g.id !== guestId);
+    setGuests(updatedGuests);
+    await saveUserField('guests', updatedGuests);
+  };
+
+  const handleDeleteExpense = async (expenseId) => {
+    const updatedExpenses = expenses.filter((e) => e.id !== expenseId);
+    setExpenses(updatedExpenses);
+    await saveUserField('expenses', updatedExpenses);
+  };
+
+  const handleDeleteIncome = async (incomeId) => {
+    const updatedIncomes = incomes.filter((e) => e.id !== incomeId);
+    setIncomes(updatedIncomes);
+    await saveUserField('incomes', updatedIncomes);
+  };
+
+  const handleDeleteEvent = async (eventId) => {
+    const updatedEvents = events.filter((e) => e.id !== eventId);
+    setEvents(updatedEvents);
+    await saveUserField('events', updatedEvents);
+  };
+
+  const handleDeleteTeam = async (teamId) => {
+    const updatedTeams = teams.filter((t) => t.id !== teamId);
+    setTeams(updatedTeams);
+    await saveUserField('teams', updatedTeams);
+  };
+
+  const handleDeleteTeamMember = async (teamId, memberId) => {
+    const updatedTeams = teams.map((t) =>
+      t.id === teamId ? { ...t, members: t.members.filter((m) => m.id !== memberId) } : t
+    );
+    setTeams(updatedTeams);
+    await saveUserField('teams', updatedTeams);
+  };
+
+  const updateEvents = async (updatedEvents) => {
+    setEvents(updatedEvents);
+    await saveUserField('events', updatedEvents);
+  };
+
   const [showGuestModal, setShowGuestModal] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showIncomeModal, setShowIncomeModal] = useState(false);
@@ -528,6 +581,12 @@ export default function App() {
   // 5. INNER COMPONENTS RENDERING LOGIC
   const DashboardTab = () => {
     const totalIncomes = incomes.reduce((sum, inc) => sum + inc.amount, 0);
+    const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+    const remainingBudget = totalIncomes - totalExpenses;
+    const completedEvents = events.filter(event => event.completed).length;
+    const totalEvents = events.length;
+    const totalGuests = guests.reduce((sum, guest) => sum + (guest.accompanying || 0) + 1, 0);
+    
     return (
       <div className="space-y-6">
         <div className="bg-gradient-to-r from-amber-600 to-rose-600 text-white p-8 rounded-3xl shadow-lg relative overflow-hidden">
@@ -546,14 +605,47 @@ export default function App() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-amber-100 flex items-center space-x-4 space-x-reverse">
             <div className="bg-amber-100 p-4 rounded-full text-amber-600 mr-4">
               <Clock size={28} />
             </div>
             <div>
               <p className="text-gray-500 text-sm font-medium">{t.daysLeft}</p>
-              <p className="text-3xl font-bold text-gray-800">{daysLeft > 0 ? daysLeft : 0}</p>
+              <p className="text-2xl md:text-3xl font-bold text-gray-800">{daysLeft > 0 ? daysLeft : 0}</p>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-green-100 flex items-center space-x-4 space-x-reverse">
+            <div className="bg-green-100 p-4 rounded-full text-green-600 mr-4">
+              <Wallet size={28} />
+            </div>
+            <div>
+              <p className="text-gray-500 text-sm font-medium">{isRtl ? 'الميزانية المتبقية' : 'Remaining Budget'}</p>
+              <p className="text-2xl md:text-3xl font-bold text-gray-800">
+                <span>{remainingBudget.toLocaleString()}</span>
+                <span className="text-sm align-text-top ml-2">{t.currency}</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-100 flex items-center space-x-4 space-x-reverse">
+            <div className="bg-blue-100 p-4 rounded-full text-blue-600 mr-4">
+              <CheckCircle size={28} />
+            </div>
+            <div>
+              <p className="text-gray-500 text-sm font-medium">{isRtl ? 'الفعاليات المكتملة' : 'Events Completed'}</p>
+              <p className="text-2xl md:text-3xl font-bold text-gray-800">{completedEvents}/{totalEvents}</p>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-100 flex items-center space-x-4 space-x-reverse">
+            <div className="bg-purple-100 p-4 rounded-full text-purple-600 mr-4">
+              <Users size={28} />
+            </div>
+            <div>
+              <p className="text-gray-500 text-sm font-medium">{isRtl ? 'إجمالي الضيوف' : 'Total Guests'}</p>
+              <p className="text-2xl md:text-3xl font-bold text-gray-800">{totalGuests}</p>
             </div>
           </div>
         </div>
@@ -578,14 +670,14 @@ export default function App() {
                   <input
                     type="checkbox"
                     checked={eventInfo.completed}
-                    onChange={(e) => setEvents(events.map(ev => ev.id === eventInfo.id ? { ...ev, completed: e.target.checked } : ev))}
+                    onChange={(e) => updateEvents(events.map(ev => ev.id === eventInfo.id ? { ...ev, completed: e.target.checked } : ev))}
                     className="w-5 h-5 text-amber-600 bg-gray-100 border-gray-300 rounded focus:ring-amber-500 focus:ring-2"
                   />
                   <h3 className={`text-lg font-bold ${eventInfo.completed ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
                     {eventInfo.titleKey ? t[eventInfo.titleKey] : eventInfo.title}
                   </h3>
                 </div>
-                <button onClick={() => setEvents(events.filter(e => e.id !== eventInfo.id))} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={16} /></button>
+                <button onClick={() => handleDeleteEvent(eventInfo.id)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={16} /></button>
               </div>
 
               <div className="space-y-3 mb-4 text-sm text-gray-600">
@@ -596,7 +688,7 @@ export default function App() {
                     min={todayStr}
                     className="bg-transparent border-b border-gray-100 focus:border-amber-400 outline-none w-full pb-1"
                     value={eventInfo.date}
-                    onChange={(e) => setEvents(events.map(ev => ev.id === eventInfo.id ? { ...ev, date: e.target.value } : ev))}
+                    onChange={(e) => updateEvents(events.map(ev => ev.id === eventInfo.id ? { ...ev, date: e.target.value } : ev))}
                   />
                 </div>
                 <div className="flex items-center gap-2">
@@ -606,7 +698,7 @@ export default function App() {
                     placeholder={t.eventLocation}
                     className="bg-transparent border-b border-gray-100 focus:border-amber-400 outline-none w-full pb-1"
                     value={eventInfo.location}
-                    onChange={(e) => setEvents(events.map(ev => ev.id === eventInfo.id ? { ...ev, location: e.target.value } : ev))}
+                    onChange={(e) => updateEvents(events.map(ev => ev.id === eventInfo.id ? { ...ev, location: e.target.value } : ev))}
                   />
                 </div>
               </div>
@@ -620,7 +712,7 @@ export default function App() {
                   rows="2"
                   placeholder="اكتب تجهيزات وملاحظات الفعالية هنا..."
                   value={eventInfo.notes}
-                  onChange={(e) => setEvents(events.map(ev => ev.id === eventInfo.id ? { ...ev, notes: e.target.value } : ev))}
+                  onChange={(e) => updateEvents(events.map(ev => ev.id === eventInfo.id ? { ...ev, notes: e.target.value } : ev))}
                 ></textarea>
               </div>
             </div>
@@ -650,7 +742,7 @@ export default function App() {
                   {team.phone && <p className="text-xs text-blue-600 font-bold">{isRtl ? 'الهاتف' : 'Phone'}: <span className="text-gray-700">{team.phone}</span></p>}
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  <button onClick={() => setTeams(teams.filter(t => t.id !== team.id))} className="text-blue-300 hover:text-red-500 transition"><Trash2 size={16} /></button>
+                  <button onClick={() => handleDeleteTeam(team.id)} className="text-blue-300 hover:text-red-500 transition"><Trash2 size={16} /></button>
                   <span className="bg-blue-200 text-blue-800 text-xs px-2 py-1 rounded-full font-bold">{team.members.length}</span>
                 </div>
               </div>
@@ -663,7 +755,7 @@ export default function App() {
                   {team.members.map(member => (
                     <div key={member.id} className="bg-gray-50 p-2.5 rounded-xl border border-gray-100 flex justify-between items-center">
                       <p className="font-bold text-gray-800 text-sm">{member.name}</p>
-                      <button onClick={() => setTeams(teams.map(t => t.id === team.id ? { ...t, members: t.members.filter(m => m.id !== member.id) } : t))} className="text-gray-400 hover:text-red-500 transition"><Trash2 size={14} /></button>
+                      <button onClick={() => handleDeleteTeamMember(team.id, member.id)} className="text-gray-400 hover:text-red-500 transition"><Trash2 size={14} /></button>
                     </div>
                   ))}
                 </div>
@@ -797,7 +889,7 @@ export default function App() {
                       <td className="p-4 font-bold text-gray-800">{guest.name}</td>
                       <td className="p-4 text-center font-bold text-amber-600 bg-amber-50/30">+{guest.accompanying}</td>
                       <td className="p-4 text-center">
-                        <button onClick={() => setGuests(guests.filter(g => g.id !== guest.id))} className="text-gray-400 hover:text-red-500 p-1.5 rounded-lg transition"><Trash2 size={18} /></button>
+                        <button onClick={() => handleDeleteGuest(guest.id)} className="text-gray-400 hover:text-red-500 p-1.5 rounded-lg transition"><Trash2 size={18} /></button>
                       </td>
                     </tr>
                   ))
@@ -870,7 +962,7 @@ export default function App() {
 
                     {inc.type !== (isRtl ? 'شخصي' : 'Personal') && ( // Prevent deleting initial budget easily
 
-                      <button onClick={() => setIncomes(incomes.filter(e => e.id !== inc.id))} className="text-gray-300 hover:text-red-500 transition"><Trash2 size={16} /></button>
+                      <button onClick={() => handleDeleteIncome(inc.id)} className="text-gray-300 hover:text-red-500 transition"><Trash2 size={16} /></button>
 
                     )}
 
@@ -890,7 +982,7 @@ export default function App() {
                   <span className="font-bold text-gray-800">{exp.item}</span>
                   <div className="flex items-center gap-4">
                     <span className="text-rose-600 font-black">-{exp.amount.toLocaleString()}</span>
-                    <button onClick={() => setExpenses(expenses.filter(e => e.id !== exp.id))} className="text-gray-300 hover:text-red-500 transition"><Trash2 size={16} /></button>
+                    <button onClick={() => handleDeleteExpense(exp.id)} className="text-gray-300 hover:text-red-500 transition"><Trash2 size={16} /></button>
                   </div>
                 </li>
               ))}
@@ -984,10 +1076,15 @@ export default function App() {
           </div>
 
           {/* Center: App Logo & Name */}
-          <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-2 text-amber-700 font-extrabold text-2xl">
-            <CalendarHeart size={28} className="text-amber-500 hidden sm:block" />
+          <button
+            type="button"
+            onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            aria-label={isRtl ? 'العودة إلى الصفحة الرئيسية' : 'Go to homepage'}
+            className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-2 text-amber-700 font-extrabold text-2xl rounded-full px-2 py-1 hover:bg-amber-50 transition focus:outline-none focus:ring-2 focus:ring-amber-300"
+          >
+            <CalendarHeart size={24} className="text-amber-500" />
             <span>{t.appName}</span>
-          </div>
+          </button>
 
           {/* Right: Burger Menu */}
           <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="md:hidden text-amber-700 p-1 hover:bg-amber-50 rounded-lg transition">
