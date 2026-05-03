@@ -73,10 +73,14 @@ const dict = {
     accompanying: "المرافقين",
     designInvite: "دعوة",
     importCsv: "استيراد من CSV",
+    actions: "إجراءات",
+
     // Budget
     finances: "المالية والمصروفات",
     incomes: "الموارد المالية",
     expenses: "المصروفات",
+    totalExpenses: "إجمالي المصروفات",
+    remainingBudget: "المتبقي",
     addIncome: "إضافة مورد مالي",
     addExpense: "إضافة مصروف",
     itemName: "البند / المصدر",
@@ -170,10 +174,13 @@ const dict = {
     accompanying: "Accompanying",
     designInvite: "Invite",
     importCsv: "Import CSV",
+    actions: "Actions",
     // Budget
     finances: "Finances",
     incomes: "Incomes / Funds",
     expenses: "Expenses",
+    totalExpenses: "Total Expenses",
+    remainingBudget: "Remaining",
     addIncome: "Add Income",
     addExpense: "Add Expense",
     itemName: "Item / Source",
@@ -217,7 +224,7 @@ const generateWithGemini = async (prompt) => {
     console.warn("Gemini API key is missing. Simulating response.");
     return new Promise(resolve => setTimeout(() => resolve("Simulated AI response. Please add your API key to src/App.jsx."), 1500));
   }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
   const payload = { contents: [{ parts: [{ text: prompt }] }] };
 
   let retries = 5;
@@ -258,8 +265,30 @@ export default function App() {
   }, []);
 
   // دالة تسجيل الخروج
-  const handleLogout = () => {
-    signOut(auth);
+  const handleLogout = async () => {
+    try {
+    await signOut(auth); // تسجيل الخروج من Firebase
+
+  // تصفير كل الذاكرة عشان الحساب الجديد يبدأ من الصفر
+  setIsSetupComplete(false);
+  setCouple({ groom: "", bride: "", date: "", initialBudget: "" });
+  setEvents([]);
+  setGuests([]);
+  setIncomes([]);
+  setExpenses([]);
+  setProfileInfo({
+    username: '',
+    email: '',
+    phone: '',
+    bio: ''
+  });
+
+  // مهم جداً: إذا في شي ينحفظ في الlocalStorage لازم امسحه هنا عشان ما يعلق بيانات الحساب القديم
+  localStorage.clear();
+
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
   };
 
   const [profileInfo, setProfileInfo] = useState({
@@ -329,10 +358,21 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const [couple, setCouple] = useState({ groom: "", bride: "", date: "", initialBudget: 0 });
+  const [couple, setCouple] = useState({ groom: "", bride: "", date: "", initialBudget: "", });
+  const [events, setEvents] = useState([
+    { id: 'contract', titleKey: 'contract', title: "", date: "", location: "", notes: "", completed: false },
+    { id: 'henna', titleKey: 'henna', title: "", date: "", location: "", notes: "", completed: false },
+    { id: 'magyal', titleKey: 'magyal', title: "", date: "", location: "", notes: "", completed: false },
+    { id: 'banquet', titleKey: 'banquet', title: "", date: "", location: "", notes: "", completed: false },
+  ]);
   const [guests, setGuests] = useState([]);
   const [incomes, setIncomes] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  // Teams structure: id, name, leader, phone, tasks, members[]
+  const [teams, setTeams] = useState([
+    { id: 1, name: "فريق الاستقبال", leader: "", phone: "", tasks: "استقبال الضيوف وتطييبهم بالبخور", members: [] },
+    { id: 2, name: "فريق الضيافة", leader: "", phone: "", tasks: "الإشراف على توزيع القهوة والمديد", members: [] }
+  ]);
 
   // --- كود الاسترجاع العظيم (Fetch Data) ---
   useEffect(() => {
@@ -343,22 +383,50 @@ export default function App() {
           const userDocRef = doc(db, 'users', user.uid);
           const docSnap = await getDoc(userDocRef); // سحب الملف بالكامل
 
-          if (docSnap.exists()) {
+         if (docSnap.exists()) {
             const data = docSnap.data(); // تفريغ محتوى الملف في متغير data
 
             // 1. استرجاع بيانات العرسان وإخفاء شاشة الإعداد إذا كانت مكتملة
             if (data.setup) {
               setCouple(data.setup);
               setIsSetupComplete(true); 
-            }
-            
+            } else {
+              setIsSetupComplete(false);
+            } 
+
             // 2. استرجاع باقي الأقسام (إن وُجدت)
             if (data.guests) setGuests(data.guests);
             if (data.expenses) setExpenses(data.expenses);
-            if (data.incomes) setIncomes(data.incomes);
             if (data.events) setEvents(data.events);
             if (data.teams) setTeams(data.teams);
             if (data.profile) setProfileInfo(data.profile);
+
+            // --- 🌟 التعديل السحري للميزانية المبدئية 🌟 ---
+            // نجيب الموارد من الفايربيس (وإذا مافيه نخليها مصفوفة فاضية عشان نقدر نضيف عليها)
+            let fetchedIncomes = data.incomes || []; 
+
+            // إذا كان المستخدم عنده ميزانية مبدئية مسجلة في الإعدادات
+            if (data.setup && data.setup.initialBudget) {
+              // نفحص: هل الميزانية المبدئية موجودة أصلاً داخل القائمة اللي جات من فايربيس؟
+              const hasInitialBudget = fetchedIncomes.some(inc => inc.type === 'شخصي' || inc.type === 'Personal');
+              
+              // إذا مو موجودة (بسبب التحديث)، نزرعها غصب كأول عنصر!
+              if (!hasInitialBudget) {
+                fetchedIncomes = [
+                  {
+                    id: 'initial_budget_fixed', // آي دي ثابت عشان ما تتكرر
+                    source: isRtl ? 'الميزانية المبدئية' : 'Initial Budget',
+                    type: isRtl ? 'شخصي' : 'Personal',
+                    amount: data.setup.initialBudget // سحبنا الرقم من بيانات العريس
+                  },
+                  ...fetchedIncomes // ونحط تحتها باقي الموارد الإضافية
+                ];
+              }
+            }
+            
+            // أخيراً: نعتمد القائمة المدمجة ونرسلها للشاشة
+            setIncomes(fetchedIncomes);
+            // ----------------------------------------------
 
             console.log("تم استرجاع جميع البيانات بنجاح! 📥🎯", data);
           } else {
@@ -372,19 +440,6 @@ export default function App() {
 
     fetchUserData();
   }, [user]); // هذا القوس يعني: "شغّل هذا الكود كلما تغيرت حالة المستخدم (تسجيل دخول/خروج)"
-
-  // Teams structure: id, name, leader, phone, tasks, members[]
-  const [teams, setTeams] = useState([
-    { id: 1, name: "فريق الاستقبال", leader: "سالم", phone: "", tasks: "استقبال الضيوف وتطييبهم بالبخور", members: [] },
-    { id: 2, name: "فريق الضيافة", leader: "عبدالله", phone: "", tasks: "الإشراف على توزيع القهوة والمديد", members: [] }
-  ]);
-
-  const [events, setEvents] = useState([
-    { id: 'contract', titleKey: 'contract', title: "", date: "", location: "", notes: "", completed: false },
-    { id: 'henna', titleKey: 'henna', title: "", date: "", location: "", notes: "", completed: false },
-    { id: 'magyal', titleKey: 'magyal', title: "", date: "", location: "", notes: "", completed: false },
-    { id: 'banquet', titleKey: 'banquet', title: "", date: "", location: "", notes: "", completed: false },
-  ]);
 
   const [showGuestModal, setShowGuestModal] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -728,7 +783,7 @@ export default function App() {
                 <tr>
                   <th className={`p-4 font-bold ${isRtl ? 'text-right' : 'text-left'}`}>{t.guestName}</th>
                   <th className={`p-4 font-bold text-center`}>{t.accompanying}</th>
-                  <th className="p-4 font-bold text-center">إجراء</th>
+                  <th className="p-4 font-bold text-center">{t.actions}</th>
                 </tr>
               </thead>
               <tbody>
@@ -756,8 +811,9 @@ export default function App() {
   };
 
   const BudgetTab = () => {
-    const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-    const totalIncomes = incomes.reduce((sum, inc) => sum + inc.amount, 0);
+    const currentinitialBudget = Number(couple?.initialBudget) || 0;
+    const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+    const totalIncomes = incomes.reduce((sum, inc) => sum + Number(inc.amount), 0);
     const remainingBudget = totalIncomes - totalExpenses;
 
     return (
@@ -782,12 +838,12 @@ export default function App() {
           </div>
           <div className="bg-rose-50 p-6 rounded-2xl border border-rose-100 text-center relative overflow-hidden">
             <div className="absolute top-0 right-0 w-16 h-16 bg-rose-100 rounded-bl-full opacity-50"></div>
-            <p className="text-rose-800 font-bold mb-2 relative z-10">إجمالي المصروفات</p>
+            <p className="text-rose-800 font-bold mb-2 relative z-10">{t.totalExpenses}</p>
             <p className="text-2xl font-black text-rose-900 relative z-10">{totalExpenses.toLocaleString()} <span className="text-sm">{t.currency}</span></p>
           </div>
           <div className="bg-green-50 p-6 rounded-2xl border border-green-100 text-center relative overflow-hidden">
             <div className="absolute top-0 right-0 w-16 h-16 bg-green-100 rounded-bl-full opacity-50"></div>
-            <p className="text-green-800 font-bold mb-2 relative z-10">المتبقي</p>
+            <p className="text-green-800 font-bold mb-2 relative z-10">{t.remainingBudget}</p>
             <p className="text-2xl font-black text-green-900 relative z-10">{remainingBudget.toLocaleString()} <span className="text-sm">{t.currency}</span></p>
           </div>
         </div>
@@ -797,18 +853,31 @@ export default function App() {
             <h3 className="font-bold text-lg text-gray-800 mb-4 pb-2 border-b border-gray-100">{t.incomes}</h3>
             <ul className="space-y-3">
               {incomes.length === 0 ? <p className="text-gray-500 text-sm">لا توجد موارد مسجلة.</p> : incomes.map((inc) => (
+
                 <li key={inc.id} className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-xl border border-gray-50 transition">
+
                   <div>
+
                     <span className="font-bold text-gray-800 block">{inc.source}</span>
+
                     <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full font-bold">{inc.type}</span>
+
                   </div>
+
                   <div className="flex items-center gap-4">
+
                     <span className="text-green-600 font-black">+{inc.amount.toLocaleString()}</span>
+
                     {inc.type !== (isRtl ? 'شخصي' : 'Personal') && ( // Prevent deleting initial budget easily
+
                       <button onClick={() => setIncomes(incomes.filter(e => e.id !== inc.id))} className="text-gray-300 hover:text-red-500 transition"><Trash2 size={16} /></button>
+
                     )}
+
                   </div>
+
                 </li>
+
               ))}
             </ul>
           </div>
