@@ -1088,8 +1088,17 @@ export default function App() {
       <span>{t.appName}</span>
     </button>
 
-    {/* Right: مساحة فارغة لموازنة الشعار في المنتصف بعد حذف البرجر */}
-    <div className="w-12 md:hidden"></div>
+    {/* Right: Language Switch Button */}
+    <button
+      onClick={toggleLang}
+      className="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:text-amber-600 hover:bg-amber-50 transition border border-gray-200 bg-white"
+      title={lang === 'ar' ? 'Switch to English' : 'التبديل للعربية'}
+    >
+      <Globe size={18} />
+      <span className="hidden sm:inline text-sm font-medium">
+        {lang === 'ar' ? 'EN' : 'عر'}
+      </span>
+    </button>
   </div>
 
   {/* --- القائمة الجانبية الموحدة (Unified Mobile Drawer) --- */}
@@ -1105,6 +1114,7 @@ export default function App() {
       <div 
         className={`relative w-[85%] max-w-sm bg-white h-full shadow-2xl flex flex-col ${isRtl ? 'left-0 ml-auto' : 'right-0 mr-auto'}`}
         onClick={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()} // هذا السطر اللي بيوقف اختفاء القائمة في الجوال 
       >
         {/* زر إغلاق القائمة (X) */}
         <button 
