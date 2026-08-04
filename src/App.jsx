@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import Auth from './Auth'; // استدعاء صفحة تسجيل الدخول
 import { auth, db } from './firebase'; // استدعاء إعدادات قاعدة البيانات
@@ -7,8 +7,8 @@ import { onAuthStateChanged, signOut } from 'firebase/auth'; // أدوات تس�
 import {
   Home, CalendarHeart, Users, Wallet, Store,
   Globe, Plus, Trash2, CheckCircle, Clock, MapPin,
-  Menu, X, Sparkles, Loader2, Copy, HeartHandshake, Image as ImageIcon, FileText,
-  MessageCircle, Send, Upload, FileSpreadsheet
+  X, Sparkles, Loader2, HeartHandshake, FileText,
+  MessageCircle, Send, FileSpreadsheet
 } from 'lucide-react';
 
 // --- Dictionary for Bilingual Support ---
@@ -241,7 +241,7 @@ const generateWithGemini = async (prompt) => {
         return data.candidates[0].content.parts[0].text;
       }
       throw new Error("Invalid response");
-    } catch (err) {
+    } catch {
       retries--;
       if (retries === 0) return null;
       await new Promise(r => setTimeout(r, delay));
@@ -354,9 +354,9 @@ export default function App() {
 };
   // 1. ALL HOOKS DECLARED AT THE TOP LEVEL
   const [lang, setLang] = useState('ar');
+  const isRtl = lang === 'ar';
   const [isSetupComplete, setIsSetupComplete] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const [couple, setCouple] = useState({ groom: "", bride: "", date: "", initialBudget: "", });
   const [events, setEvents] = useState([
@@ -439,7 +439,7 @@ export default function App() {
     };
 
     fetchUserData();
-  }, [user]); // هذا القوس يعني: "شغّل هذا الكود كلما تغيرت حالة المستخدم (تسجيل دخول/خروج)"
+  }, [user, isRtl]); // هذا القوس يعني: "شغّل هذا الكود كلما تغيرت حالة المستخدم (تسجيل دخول/خروج)"
 
   const saveUserField = async (field, value) => {
     if (!user) return;
@@ -508,12 +508,17 @@ export default function App() {
   const [isChatLoading, setIsChatLoading] = useState(false);
 
   useEffect(() => {
-    setChatMessages([{ role: 'ai', text: lang === 'ar' ? 'حياكم الله وبياكم! أنا مساعدكم الحضرمي.. كيف أقدر أساعدكم اليوم في تجهيزات الزواج؟' : 'Welcome! I am your Hadhrami wedding assistant. How can I help you today?' }]);
+    let ignore = false;
+    setTimeout(() => {
+      if (!ignore) {
+        setChatMessages([{ role: 'ai', text: lang === 'ar' ? 'حياكم الله وبياكم! أنا مساعدكم الحضرمي.. كيف أقدر أساعدكم اليوم في تجهيزات الزواج؟' : 'Welcome! I am your Hadhrami wedding assistant. How can I help you today?' }]);
+      }
+    }, 0);
+    return () => { ignore = true; };
   }, [lang]);
 
   // 2. CONSTANTS AND UTILS
   const t = dict[lang];
-  const isRtl = lang === 'ar';
   const toggleLang = () => setLang(lang === 'ar' ? 'en' : 'ar');
   const daysLeft = couple.date ? Math.ceil((new Date(couple.date) - new Date()) / (1000 * 60 * 60 * 24)) : 0;
   const todayStr = new Date().toISOString().split('T')[0];
@@ -884,7 +889,7 @@ export default function App() {
                     <td colSpan="3" className="p-8 text-center text-gray-500">لا يوجد ضيوف مضافين بعد.</td>
                   </tr>
                 ) : (
-                  guests.map((guest, idx) => (
+                  guests.map((guest) => (
                     <tr key={guest.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="p-4 font-bold text-gray-800">{guest.name}</td>
                       <td className="p-4 text-center font-bold text-amber-600 bg-amber-50/30">+{guest.accompanying}</td>
@@ -903,7 +908,6 @@ export default function App() {
   };
 
   const BudgetTab = () => {
-    const currentinitialBudget = Number(couple?.initialBudget) || 0;
     const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
     const totalIncomes = incomes.reduce((sum, inc) => sum + Number(inc.amount), 0);
     const remainingBudget = totalIncomes - totalExpenses;
