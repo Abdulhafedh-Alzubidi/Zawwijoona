@@ -14,7 +14,7 @@ import {
 // --- Dictionary for Bilingual Support ---
 const dict = {
   ar: {
-    appName: "زوجونا",
+    appName: "مراسيم",
     dashboard: "الرئيسية",
     planning: "خطة الزفاف",
     services: "الخدمات والحجوزات",
@@ -31,7 +31,7 @@ const dict = {
     signupBtn: "تسجيل",
     noAccount: "ليس لديك حساب؟",
     haveAccount: "لديك حساب بالفعل؟",
-    
+
     // Registration
     welcomeSetup: "إعداد ملف الزفاف",
     groomName: "اسم العريس",
@@ -116,7 +116,7 @@ const dict = {
     cancel: "إلغاء",
   },
   en: {
-    appName: "Zawwijoona",
+    appName: "Maraseem",
     dashboard: "Dashboard",
     planning: "Planning",
     services: "Services",
@@ -124,7 +124,7 @@ const dict = {
     budget: "Budget",
     team: "Organizers",
     switchLang: "العربية",
-     // ... login/signup ...
+    // ... login/signup ...
     loginTitle: "Sign In",
     signupTitle: "Sign Up",
     email: "Email Address",
@@ -267,24 +267,24 @@ export default function App() {
   // دالة تسجيل الخروج
   const handleLogout = async () => {
     try {
-    await signOut(auth); // تسجيل الخروج من Firebase
+      await signOut(auth); // تسجيل الخروج من Firebase
 
-  // تصفير كل الذاكرة عشان الحساب الجديد يبدأ من الصفر
-  setIsSetupComplete(false);
-  setCouple({ groom: "", bride: "", date: "", initialBudget: "" });
-  setEvents([]);
-  setGuests([]);
-  setIncomes([]);
-  setExpenses([]);
-  setProfileInfo({
-    username: '',
-    email: '',
-    phone: '',
-    bio: ''
-  });
+      // تصفير كل الذاكرة عشان الحساب الجديد يبدأ من الصفر
+      setIsSetupComplete(false);
+      setCouple({ groom: "", bride: "", date: "", initialBudget: "" });
+      setEvents([]);
+      setGuests([]);
+      setIncomes([]);
+      setExpenses([]);
+      setProfileInfo({
+        username: '',
+        email: '',
+        phone: '',
+        bio: ''
+      });
 
-  // مهم جداً: إذا في شي ينحفظ في الlocalStorage لازم امسحه هنا عشان ما يعلق بيانات الحساب القديم
-  localStorage.clear();
+      // مهم جداً: إذا في شي ينحفظ في الlocalStorage لازم امسحه هنا عشان ما يعلق بيانات الحساب القديم
+      localStorage.clear();
 
     } catch (error) {
       console.error("Error signing out:", error);
@@ -332,26 +332,26 @@ export default function App() {
   };
 
   const handleProfileSave = async () => {
-  console.log("1. تم الضغط على زر الحفظ!"); // إذا ما طلعت هذي، يعني الزر مفصول
-  
-  if (user) {
-    console.log("2. المستخدم موجود، جاري الحفظ في فايربيس...");
-    try {
-      const userDocRef = doc(db, 'users', user.uid);
-      await setDoc(userDocRef, {
-        profile: profileInfo
-      }, { merge: true });
-      
-      console.log("3. تم الحفظ في فايربيس بنجاح! 👤", profileInfo);
-      setIsProfileEditMode(false); 
-      
-    } catch (error) {
-      console.error("خطأ في حفظ بيانات الحساب:", error);
+    console.log("1. تم الضغط على زر الحفظ!"); // إذا ما طلعت هذي، يعني الزر مفصول
+
+    if (user) {
+      console.log("2. المستخدم موجود، جاري الحفظ في فايربيس...");
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+        await setDoc(userDocRef, {
+          profile: profileInfo
+        }, { merge: true });
+
+        console.log("3. تم الحفظ في فايربيس بنجاح! 👤", profileInfo);
+        setIsProfileEditMode(false);
+
+      } catch (error) {
+        console.error("خطأ في حفظ بيانات الحساب:", error);
+      }
+    } else {
+      console.log("❌ خطأ: المتغير user غير موجود أو لم يتم تسجيل الدخول!");
     }
-  } else {
-    console.log("❌ خطأ: المتغير user غير موجود أو لم يتم تسجيل الدخول!");
-  }
-};
+  };
   // 1. ALL HOOKS DECLARED AT THE TOP LEVEL
   const [lang, setLang] = useState('ar');
   const [isSetupComplete, setIsSetupComplete] = useState(false);
@@ -383,16 +383,16 @@ export default function App() {
           const userDocRef = doc(db, 'users', user.uid);
           const docSnap = await getDoc(userDocRef); // سحب الملف بالكامل
 
-         if (docSnap.exists()) {
+          if (docSnap.exists()) {
             const data = docSnap.data(); // تفريغ محتوى الملف في متغير data
 
             // 1. استرجاع بيانات العرسان وإخفاء شاشة الإعداد إذا كانت مكتملة
             if (data.setup) {
               setCouple(data.setup);
-              setIsSetupComplete(true); 
+              setIsSetupComplete(true);
             } else {
               setIsSetupComplete(false);
-            } 
+            }
 
             // 2. استرجاع باقي الأقسام (إن وُجدت)
             if (data.guests) setGuests(data.guests);
@@ -403,13 +403,13 @@ export default function App() {
 
             // --- 🌟 التعديل السحري للميزانية المبدئية 🌟 ---
             // نجيب الموارد من الفايربيس (وإذا مافيه نخليها مصفوفة فاضية عشان نقدر نضيف عليها)
-            let fetchedIncomes = data.incomes || []; 
+            let fetchedIncomes = data.incomes || [];
 
             // إذا كان المستخدم عنده ميزانية مبدئية مسجلة في الإعدادات
             if (data.setup && data.setup.initialBudget) {
               // نفحص: هل الميزانية المبدئية موجودة أصلاً داخل القائمة اللي جات من فايربيس؟
               const hasInitialBudget = fetchedIncomes.some(inc => inc.type === 'شخصي' || inc.type === 'Personal');
-              
+
               // إذا مو موجودة (بسبب التحديث)، نزرعها غصب كأول عنصر!
               if (!hasInitialBudget) {
                 fetchedIncomes = [
@@ -423,7 +423,7 @@ export default function App() {
                 ];
               }
             }
-            
+
             // أخيراً: نعتمد القائمة المدمجة ونرسلها للشاشة
             setIncomes(fetchedIncomes);
             // ----------------------------------------------
@@ -586,7 +586,7 @@ export default function App() {
     const completedEvents = events.filter(event => event.completed).length;
     const totalEvents = events.length;
     const totalGuests = guests.reduce((sum, guest) => sum + (guest.accompanying || 0) + 1, 0);
-    
+
     return (
       <div className="space-y-6">
         <div className="bg-gradient-to-r from-amber-600 to-rose-600 text-white p-8 rounded-3xl shadow-lg relative overflow-hidden">
@@ -618,7 +618,7 @@ export default function App() {
 
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-green-100 flex items-center lg:flex-col lg:items-center lg:justify-center lg:text-center lg:gap-2">
             <div className="bg-green-100 p-4 rounded-full text-green-600">
-              <Wallet size={28} className='md:max-lg:size-6'/>
+              <Wallet size={28} className='md:max-lg:size-6' />
             </div>
             <div className="relative md:max-lg:mx-4">
               <p className="text-gray-500 text-sm font-medium lg:mb-2">{isRtl ? 'الميزانية المتبقية' : 'Remaining Budget'}</p>
@@ -631,7 +631,7 @@ export default function App() {
 
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-100 flex items-center lg:flex-col lg:items-center lg:justify-center lg:text-center lg:gap-2">
             <div className="bg-blue-100 p-4 rounded-full text-blue-600">
-              <CheckCircle size={28}className='md:max-lg:size-6' />
+              <CheckCircle size={28} className='md:max-lg:size-6' />
             </div>
             <div className="md:max-lg:mx-4">
               <p className="text-gray-500 text-sm font-medium lg:mb-2">{isRtl ? 'الفعاليات المكتملة' : 'Events Completed'}</p>
@@ -641,7 +641,7 @@ export default function App() {
 
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-100 flex items-center lg:flex-col lg:items-center lg:justify-center lg:text-center lg:gap-2">
             <div className="bg-purple-100 p-4 rounded-full text-purple-600">
-              <Users size={28} className='md:max-lg:size-6'/>
+              <Users size={28} className='md:max-lg:size-6' />
             </div>
             <div className="md:max-lg:mx-4">
               <p className="text-gray-500 text-sm font-medium lg:mb-2">{isRtl ? 'إجمالي الضيوف' : 'Total Guests'}</p>
@@ -1005,9 +1005,9 @@ export default function App() {
 
   // 2. إذا لم يكن هناك مستخدم مسجل، نعرض صفحة تسجيل الدخول
   if (!user) {
-    return <Auth onLoginSuccess={() => console.log('تم تسجيل الدخول بنجاح')} 
-    toggleLang={toggleLang}
-    isRtl={isRtl} />;
+    return <Auth onLoginSuccess={() => console.log('تم تسجيل الدخول بنجاح')}
+      toggleLang={toggleLang}
+      isRtl={isRtl} />;
   }
   // 4. EARLY RETURNS
   if (!isSetupComplete) {
@@ -1057,158 +1057,158 @@ export default function App() {
 
       {/* Navigation */}
       {/* Navigation */}
-<nav className="relative bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
-  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between h-16 items-center">
-    
-    {/* Left: Profile Menu Button (الزر الوحيد الآن لفتح القائمة) */}
-    <div className="relative profile-menu-container">
-      <button
-        type="button"
-        onClick={() => setIsProfileMenuOpen((open) => !open)}
-        className="flex items-center gap-3 rounded-full border border-gray-200 bg-white px-2 py-1 hover:shadow-sm transition"
-      >
-        <div className="h-10 w-10 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center justify-center">
-          {profileInfo.username ? profileInfo.username[0].toUpperCase() : 'U'}
-        </div>
-        <div className="hidden sm:flex flex-col text-left">
-          <span className="text-sm font-semibold text-gray-800">{profileInfo.username || 'ضيفنا'}</span>
-          <span className="text-xs text-gray-500 truncate">{profileInfo.email || t.appName}</span>
-        </div>
-      </button>
-    </div>
+      <nav className="relative bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between h-16 items-center">
 
-    {/* Center: App Logo & Name */}
-    <button
-      type="button"
-      onClick={() => { setActiveTab('dashboard'); setIsProfileMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-      aria-label={isRtl ? 'العودة إلى الصفحة الرئيسية' : 'Go to homepage'}
-      className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-2 text-amber-700 font-extrabold text-2xl rounded-full px-2 py-1 hover:bg-amber-50 transition focus:outline-none focus:ring-2 focus:ring-amber-300"
-    >
-      <CalendarHeart size={24} className="text-amber-500" />
-      <span>{t.appName}</span>
-    </button>
-
-    {/* Right: Language Switch Button */}
-    <button
-      onClick={toggleLang}
-      className="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:text-amber-600 hover:bg-amber-50 transition border border-gray-200 bg-white"
-      title={lang === 'ar' ? 'Switch to English' : 'التبديل للعربية'}
-    >
-      <Globe size={18} />
-      <span className="hidden sm:inline text-sm font-medium">
-        {lang === 'ar' ? 'EN' : 'عر'}
-      </span>
-    </button>
-  </div>
-
-  {/* --- القائمة الجانبية الموحدة (Unified Mobile Drawer) --- */}
-  {isProfileMenuOpen && (
-    <div className="fixed inset-0 z-50 flex">
-      {/* 1. الخلفية السوداء المعتمة */}
-      <div 
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity" 
-        onClick={() => setIsProfileMenuOpen(false)}
-      ></div>
-
-      {/* 2. النافذة الجانبية (يمين للعربي، يسار للإنجليزي) */}
-      <div 
-        className={`relative w-[85%] max-w-sm bg-white h-full shadow-2xl flex flex-col ${isRtl ? 'left-0 ml-auto' : 'right-0 mr-auto'}`}
-        onClick={(e) => e.stopPropagation()}
-        onTouchStart={(e) => e.stopPropagation()} // هذا السطر اللي بيوقف اختفاء القائمة في الجوال 
-      >
-        {/* زر إغلاق القائمة (X) */}
-        <button 
-          onClick={() => setIsProfileMenuOpen(false)} 
-          className={`absolute top-4 ${isRtl ? 'left-4' : 'right-4'} p-2 text-gray-400 hover:text-gray-800 bg-gray-50 rounded-full z-10`}
-        >
-          <X size={20} />
-        </button>
-
-        {/* --- المنطقة القابلة للتمرير --- */}
-        <div className="flex-1 overflow-y-auto pb-6 flex flex-col">
-          
-          {/* القسم الأول: بيانات البروفايل */}
-          {!isProfileEditMode ? (
-            <div className="p-6 flex flex-col items-center text-center border-b border-gray-100 relative mt-4">
-              <div className="w-20 h-20 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center justify-center text-3xl mb-3 shadow-inner">
+          {/* Left: Profile Menu Button (الزر الوحيد الآن لفتح القائمة) */}
+          <div className="relative profile-menu-container">
+            <button
+              type="button"
+              onClick={() => setIsProfileMenuOpen((open) => !open)}
+              className="flex items-center gap-3 rounded-full border border-gray-200 bg-white px-2 py-1 hover:shadow-sm transition"
+            >
+              <div className="h-10 w-10 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center justify-center">
                 {profileInfo.username ? profileInfo.username[0].toUpperCase() : 'U'}
               </div>
-              <h3 className="font-bold text-xl text-gray-900 mb-1">{profileInfo.username || 'ضيفنا'}</h3>
-              <p className="text-sm text-gray-500 mb-2">{profileInfo.email || 'لا يوجد بريد إلكتروني'}</p>
-              <p className="text-sm text-gray-800 font-medium mb-2" dir="ltr">{profileInfo.phone || '-'}</p>
-              
-              {profileInfo.bio && (
-                <p className="text-xs text-gray-600 bg-gray-50 p-3 rounded-xl w-full mb-4">
-                  {profileInfo.bio}
-                </p>
-              )}
-              
-              <button 
-                onClick={() => setIsProfileEditMode(true)} 
-                className="bg-amber-100 text-amber-700 px-6 py-1.5 rounded-full text-sm font-bold hover:bg-amber-200 transition mt-2"
-              >
-                {isRtl ? 'تعديل البيانات' : 'Edit Profile'}
-              </button>
-            </div>
-          ) : (
-            /* نموذج التعديل (نسخة مطابقة لكودك السابق) */
-            <form className="p-6 space-y-4 border-b border-gray-100 mt-4">
-              <h3 className="font-bold text-gray-800 text-lg mb-2 text-center">{isRtl ? 'تعديل البيانات' : 'Edit Profile'}</h3>
-              <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1">{isRtl ? 'اسم المستخدم' : 'Username'}</label>
-                <input type="text" value={profileInfo.username} onChange={(e) => handleProfileInfoChange('username', e.target.value)} className="w-full border border-gray-200 rounded-2xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+              <div className="hidden sm:flex flex-col text-left">
+                <span className="text-sm font-semibold text-gray-800">{profileInfo.username || 'ضيفنا'}</span>
+                <span className="text-xs text-gray-500 truncate">{profileInfo.email || t.appName}</span>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1">{isRtl ? 'الهاتف' : 'Phone'}</label>
-                <input type="text" value={profileInfo.phone} onChange={(e) => handleProfileInfoChange('phone', e.target.value)} className="w-full border border-gray-200 rounded-2xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1">{isRtl ? 'معلومات إضافية' : 'Bio'}</label>
-                <textarea value={profileInfo.bio} onChange={(e) => handleProfileInfoChange('bio', e.target.value)} rows={3} className="w-full border border-gray-200 rounded-2xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
-              </div>
-              <div className="flex items-center justify-between gap-3 mt-4">
-                <button type="button" onClick={() => setIsProfileEditMode(false)} className="flex-1 px-3 py-2 text-sm font-semibold text-gray-600 rounded-2xl border border-gray-200 hover:bg-gray-50 transition">{t.cancel}</button>
-                <button type="button" onClick={handleProfileSave} className="flex-1 px-3 py-2 text-sm font-semibold text-white rounded-2xl bg-amber-600 hover:bg-amber-700 transition">{isRtl ? 'حفظ' : 'Save'}</button>
-              </div>
-            </form>
-          )}
-
-          {/* القسم الثاني: تبويبات التنقل (تظهر فقط في الجوال لأن الديسكتوب فيه الشريط الجانبي) */}
-          <div className="p-4 md:hidden">
-            <h4 className="text-xs font-bold text-gray-400 mb-3 px-2 uppercase tracking-wider">
-              {isRtl ? 'القائمة الرئيسية' : 'Main Menu'}
-            </h4>
-            <ul className="space-y-1">
-              {navItems.map((item) => (
-                <li key={item.id}>
-                  <button
-                    onClick={() => { setActiveTab(item.id); setIsProfileMenuOpen(false); }}
-                    className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${activeTab === item.id ? 'bg-amber-50 text-amber-700 font-bold' : 'text-gray-600 font-medium hover:bg-gray-50'}`}
-                  >
-                    <div className={activeTab === item.id ? 'text-amber-600' : 'text-gray-400'}>{item.icon}</div>
-                    <span>{item.label}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            </button>
           </div>
-        </div>
 
-        {/* --- القسم الثالث: اللغة وتسجيل الخروج (ثابت في الأسفل) --- */}
-        <div className="p-4 border-t border-gray-100 bg-white flex flex-col gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)]">
-          <button onClick={toggleLang} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-medium hover:bg-gray-100 transition">
+          {/* Center: App Logo & Name */}
+          <button
+            type="button"
+            onClick={() => { setActiveTab('dashboard'); setIsProfileMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            aria-label={isRtl ? 'العودة إلى الصفحة الرئيسية' : 'Go to homepage'}
+            className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-2 text-amber-700 font-extrabold text-2xl rounded-full px-2 py-1 hover:bg-amber-50 transition focus:outline-none focus:ring-2 focus:ring-amber-300"
+          >
+            <CalendarHeart size={24} className="text-amber-500" />
+            <span>{t.appName}</span>
+          </button>
+
+          {/* Right: Language Switch Button */}
+          <button
+            onClick={toggleLang}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:text-amber-600 hover:bg-amber-50 transition border border-gray-200 bg-white"
+            title={lang === 'ar' ? 'Switch to English' : 'التبديل للعربية'}
+          >
             <Globe size={18} />
-            <span>{isRtl ? 'English' : 'العربية'}</span>
-          </button>
-          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-red-100 bg-red-50 text-red-600 font-bold hover:bg-red-100 transition">
-            {isRtl ? 'تسجيل الخروج' : 'Logout'}
+            <span className="hidden sm:inline text-sm font-medium">
+              {lang === 'ar' ? 'EN' : 'عر'}
+            </span>
           </button>
         </div>
 
-      </div>
-    </div>
-  )}
-</nav>
+        {/* --- القائمة الجانبية الموحدة (Unified Mobile Drawer) --- */}
+        {isProfileMenuOpen && (
+          <div className="fixed inset-0 z-50 flex">
+            {/* 1. الخلفية السوداء المعتمة */}
+            <div
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+              onClick={() => setIsProfileMenuOpen(false)}
+            ></div>
+
+            {/* 2. النافذة الجانبية (يمين للعربي، يسار للإنجليزي) */}
+            <div
+              className={`relative w-[85%] max-w-sm bg-white h-full shadow-2xl flex flex-col ${isRtl ? 'left-0 ml-auto' : 'right-0 mr-auto'}`}
+              onClick={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()} // هذا السطر اللي بيوقف اختفاء القائمة في الجوال 
+            >
+              {/* زر إغلاق القائمة (X) */}
+              <button
+                onClick={() => setIsProfileMenuOpen(false)}
+                className={`absolute top-4 ${isRtl ? 'left-4' : 'right-4'} p-2 text-gray-400 hover:text-gray-800 bg-gray-50 rounded-full z-10`}
+              >
+                <X size={20} />
+              </button>
+
+              {/* --- المنطقة القابلة للتمرير --- */}
+              <div className="flex-1 overflow-y-auto pb-6 flex flex-col">
+
+                {/* القسم الأول: بيانات البروفايل */}
+                {!isProfileEditMode ? (
+                  <div className="p-6 flex flex-col items-center text-center border-b border-gray-100 relative mt-4">
+                    <div className="w-20 h-20 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center justify-center text-3xl mb-3 shadow-inner">
+                      {profileInfo.username ? profileInfo.username[0].toUpperCase() : 'U'}
+                    </div>
+                    <h3 className="font-bold text-xl text-gray-900 mb-1">{profileInfo.username || 'ضيفنا'}</h3>
+                    <p className="text-sm text-gray-500 mb-2">{profileInfo.email || 'لا يوجد بريد إلكتروني'}</p>
+                    <p className="text-sm text-gray-800 font-medium mb-2" dir="ltr">{profileInfo.phone || '-'}</p>
+
+                    {profileInfo.bio && (
+                      <p className="text-xs text-gray-600 bg-gray-50 p-3 rounded-xl w-full mb-4">
+                        {profileInfo.bio}
+                      </p>
+                    )}
+
+                    <button
+                      onClick={() => setIsProfileEditMode(true)}
+                      className="bg-amber-100 text-amber-700 px-6 py-1.5 rounded-full text-sm font-bold hover:bg-amber-200 transition mt-2"
+                    >
+                      {isRtl ? 'تعديل البيانات' : 'Edit Profile'}
+                    </button>
+                  </div>
+                ) : (
+                  /* نموذج التعديل (نسخة مطابقة لكودك السابق) */
+                  <form className="p-6 space-y-4 border-b border-gray-100 mt-4">
+                    <h3 className="font-bold text-gray-800 text-lg mb-2 text-center">{isRtl ? 'تعديل البيانات' : 'Edit Profile'}</h3>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1">{isRtl ? 'اسم المستخدم' : 'Username'}</label>
+                      <input type="text" value={profileInfo.username} onChange={(e) => handleProfileInfoChange('username', e.target.value)} className="w-full border border-gray-200 rounded-2xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1">{isRtl ? 'الهاتف' : 'Phone'}</label>
+                      <input type="text" value={profileInfo.phone} onChange={(e) => handleProfileInfoChange('phone', e.target.value)} className="w-full border border-gray-200 rounded-2xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1">{isRtl ? 'معلومات إضافية' : 'Bio'}</label>
+                      <textarea value={profileInfo.bio} onChange={(e) => handleProfileInfoChange('bio', e.target.value)} rows={3} className="w-full border border-gray-200 rounded-2xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                    </div>
+                    <div className="flex items-center justify-between gap-3 mt-4">
+                      <button type="button" onClick={() => setIsProfileEditMode(false)} className="flex-1 px-3 py-2 text-sm font-semibold text-gray-600 rounded-2xl border border-gray-200 hover:bg-gray-50 transition">{t.cancel}</button>
+                      <button type="button" onClick={handleProfileSave} className="flex-1 px-3 py-2 text-sm font-semibold text-white rounded-2xl bg-amber-600 hover:bg-amber-700 transition">{isRtl ? 'حفظ' : 'Save'}</button>
+                    </div>
+                  </form>
+                )}
+
+                {/* القسم الثاني: تبويبات التنقل (تظهر فقط في الجوال لأن الديسكتوب فيه الشريط الجانبي) */}
+                <div className="p-4 md:hidden">
+                  <h4 className="text-xs font-bold text-gray-400 mb-3 px-2 uppercase tracking-wider">
+                    {isRtl ? 'القائمة الرئيسية' : 'Main Menu'}
+                  </h4>
+                  <ul className="space-y-1">
+                    {navItems.map((item) => (
+                      <li key={item.id}>
+                        <button
+                          onClick={() => { setActiveTab(item.id); setIsProfileMenuOpen(false); }}
+                          className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${activeTab === item.id ? 'bg-amber-50 text-amber-700 font-bold' : 'text-gray-600 font-medium hover:bg-gray-50'}`}
+                        >
+                          <div className={activeTab === item.id ? 'text-amber-600' : 'text-gray-400'}>{item.icon}</div>
+                          <span>{item.label}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* --- القسم الثالث: اللغة وتسجيل الخروج (ثابت في الأسفل) --- */}
+              <div className="p-4 border-t border-gray-100 bg-white flex flex-col gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)]">
+                <button onClick={toggleLang} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-medium hover:bg-gray-100 transition">
+                  <Globe size={18} />
+                  <span>{isRtl ? 'English' : 'العربية'}</span>
+                </button>
+                <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-red-100 bg-red-50 text-red-600 font-bold hover:bg-red-100 transition">
+                  {isRtl ? 'تسجيل الخروج' : 'Logout'}
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
+      </nav>
       {/* Main Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex gap-8">
         {/* Sidebar */}

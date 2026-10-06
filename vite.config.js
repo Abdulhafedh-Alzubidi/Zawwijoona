@@ -9,9 +9,9 @@ export default defineConfig({
       registerType: 'autoUpdate', // لتحديث التطبيق تلقائياً عند رفع كود جديد
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
-        name: 'تطبيق زوجونا - لتخطيط الزفاف',
-        short_name: 'زوجونا',
-        description: 'مساعدك الشخصي لتخطيط زفافك الحضرمي بكل تفاصيله',
+        name: 'تطبيق مراسيم - لتخطيط الزفاف والمناسبات',
+        short_name: 'مراسيم',
+        description: 'مساعدك الشخصي لتخطيط زفافك ومراسيمه بكل تفاصيله',
         theme_color: '#d97706', // اللون العنابي/الذهبي الذي استخدمناه (amber-600)
         background_color: '#fdfbf7',
         display: 'standalone', // هذه الكلمة هي التي تجعله يفتح كأنه تطبيق بدون متصفح
