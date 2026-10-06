@@ -8,8 +8,11 @@ import {
   Home, CalendarHeart, Users, Wallet, Store,
   Globe, Plus, Trash2, CheckCircle, Clock, MapPin,
   Menu, X, Sparkles, Loader2, Copy, HeartHandshake, Image as ImageIcon, FileText,
-  MessageCircle, Send, Upload, FileSpreadsheet
+  MessageCircle, Send, Upload, FileSpreadsheet,
+  Phone, ExternalLink, Camera, Music, Flower2, UtensilsCrossed, Search,
+  Building2, Eye, BookmarkCheck, BookmarkPlus, Check, Star, AlertCircle
 } from 'lucide-react';
+import { SERVICE_CATEGORIES, SERVICE_TEMPLATES, createWhatsAppInquiryLink } from './data/servicesData';
 
 // --- Dictionary for Bilingual Support ---
 const dict = {
@@ -64,6 +67,33 @@ const dict = {
     evening: "مسائية",
     bookNow: "احجز الآن",
     available: "متاح",
+    servicesDirectory: "دليل الخدمات والموردين",
+    myBookings: "حجوزاتي المعتمدة",
+    searchServices: "ابحث عن خدمة، مورد، أو مدينة...",
+    allCategories: "جميع الفئات",
+    priceEstimate: "التقدير التقريبي",
+    contactWhatsApp: "مراسلة عبر واتساب",
+    callPhone: "اتصال هاتفي",
+    addToBookings: "إضافة لحجوزاتي",
+    inBookings: "مضاف للحجوزات ✓",
+    removeFromBookings: "إزالة من الحجوزات",
+    viewPhotos: "معاينة الصور",
+    features: "المميزات والخدمات",
+    cityLocation: "المدينة / الموقع",
+    statusConfirmed: "مؤكد",
+    statusNegotiating: "قيد التفاوض",
+    statusInquiry: "استفسار مبدئي",
+    bookingStatus: "حالة الحجز",
+    agreedCost: "المبلغ المتفق عليه (ر.ي)",
+    addCustomService: "إضافة مزود خدمة مخصص",
+    serviceProviderName: "اسم مزود الخدمة",
+    serviceCategory: "فئة الخدمة",
+    phoneNumber: "رقم الهاتف / الواتساب",
+    noServicesFound: "لم يتم العثور على خدمات مطابقة للبحث",
+    noBookingsYet: "لم تقم بإضافة أي خدمات إلى قائمة حجوزاتك بعد",
+    startBrowsing: "استعرض دليل الخدمات وأضف ما يناسبك",
+    venueTemplatesCount: "مزود خدمة جاهز",
+    myBookingsCount: "خدمة محجوزة",
     // Guests
     guestList: "قائمة الضيوف",
     groomSide: "أهل العريس",
@@ -165,6 +195,33 @@ const dict = {
     evening: "Evening",
     bookNow: "Book Now",
     available: "Available",
+    servicesDirectory: "Vendors & Services Directory",
+    myBookings: "My Confirmed Bookings",
+    searchServices: "Search service, vendor, or city...",
+    allCategories: "All Categories",
+    priceEstimate: "Price Estimate",
+    contactWhatsApp: "WhatsApp Chat",
+    callPhone: "Call Vendor",
+    addToBookings: "Add to My Bookings",
+    inBookings: "In Bookings ✓",
+    removeFromBookings: "Remove Booking",
+    viewPhotos: "View Photos",
+    features: "Features & Amenities",
+    cityLocation: "City / Location",
+    statusConfirmed: "Confirmed",
+    statusNegotiating: "Negotiating",
+    statusInquiry: "Inquiry",
+    bookingStatus: "Booking Status",
+    agreedCost: "Agreed Amount (YER)",
+    addCustomService: "Add Custom Vendor",
+    serviceProviderName: "Service Provider Name",
+    serviceCategory: "Service Category",
+    phoneNumber: "Phone / WhatsApp Number",
+    noServicesFound: "No services match your criteria",
+    noBookingsYet: "No booked services recorded yet",
+    startBrowsing: "Explore directory and add services to your wedding",
+    venueTemplatesCount: "Ready Vendors",
+    myBookingsCount: "Booked Services",
     // Guests
     guestList: "Guest List",
     groomSide: "Groom Side",
@@ -276,6 +333,7 @@ export default function App() {
       setGuests([]);
       setIncomes([]);
       setExpenses([]);
+      setBookedServices([]);
       setProfileInfo({
         username: '',
         email: '',
@@ -374,6 +432,14 @@ export default function App() {
     { id: 2, name: "فريق الضيافة", leader: "", phone: "", tasks: "الإشراف على توزيع القهوة والمديد", members: [] }
   ]);
 
+  // --- Services & Vendors State ---
+  const [bookedServices, setBookedServices] = useState([]);
+  const [selectedServiceCategory, setSelectedServiceCategory] = useState('all');
+  const [serviceSearchQuery, setServiceSearchQuery] = useState('');
+  const [servicesSubTab, setServicesSubTab] = useState('templates'); // 'templates' | 'myBookings'
+  const [activePhotoGallery, setActivePhotoGallery] = useState(null);
+  const [showAddCustomServiceModal, setShowAddCustomServiceModal] = useState(false);
+
   // --- كود الاسترجاع العظيم (Fetch Data) ---
   useEffect(() => {
     const fetchUserData = async () => {
@@ -400,6 +466,7 @@ export default function App() {
             if (data.events) setEvents(data.events);
             if (data.teams) setTeams(data.teams);
             if (data.profile) setProfileInfo(data.profile);
+            if (data.bookedServices) setBookedServices(data.bookedServices);
 
             // --- 🌟 التعديل السحري للميزانية المبدئية 🌟 ---
             // نجيب الموارد من الفايربيس (وإذا مافيه نخليها مصفوفة فاضية عشان نقدر نضيف عليها)
@@ -492,6 +559,77 @@ export default function App() {
   const updateEvents = async (updatedEvents) => {
     setEvents(updatedEvents);
     await saveUserField('events', updatedEvents);
+  };
+
+  // --- دوال إدارة وتخزين الخدمات والموردين ---
+  const handleToggleBooking = async (service) => {
+    const isAlreadyBooked = bookedServices.some(b => b.templateId === service.id);
+    let updated;
+    if (isAlreadyBooked) {
+      updated = bookedServices.filter(b => b.templateId !== service.id);
+    } else {
+      const newBooking = {
+        id: Date.now(),
+        templateId: service.id,
+        category: service.category,
+        nameAr: service.nameAr,
+        nameEn: service.nameEn,
+        name: isRtl ? service.nameAr : service.nameEn,
+        cityAr: service.cityAr,
+        cityEn: service.cityEn,
+        city: isRtl ? service.cityAr : service.cityEn,
+        phone: service.phone,
+        whatsapp: service.whatsapp,
+        priceEstimate: isRtl ? service.priceEstimateAr : service.priceEstimateEn,
+        agreedCost: isRtl ? service.priceEstimateAr : service.priceEstimateEn,
+        status: 'confirmed', // 'confirmed' | 'negotiating' | 'inquiry'
+        notes: '',
+        image: service.images && service.images[0] ? service.images[0] : '',
+        addedAt: new Date().toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')
+      };
+      updated = [newBooking, ...bookedServices];
+    }
+    setBookedServices(updated);
+    await saveUserField('bookedServices', updated);
+  };
+
+  const handleSaveCustomService = async (customData) => {
+    const newService = {
+      id: Date.now(),
+      templateId: null,
+      isCustom: true,
+      category: customData.category,
+      nameAr: customData.name,
+      nameEn: customData.name,
+      name: customData.name,
+      cityAr: customData.city,
+      cityEn: customData.city,
+      city: customData.city,
+      phone: customData.phone,
+      whatsapp: customData.whatsapp || customData.phone,
+      agreedCost: customData.agreedCost || '',
+      priceEstimate: customData.agreedCost || '',
+      status: customData.status || 'confirmed',
+      notes: customData.notes || '',
+      image: customData.image || 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=800&q=80',
+      addedAt: new Date().toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')
+    };
+    const updated = [newService, ...bookedServices];
+    setBookedServices(updated);
+    await saveUserField('bookedServices', updated);
+    setShowAddCustomServiceModal(false);
+  };
+
+  const handleDeleteBookedService = async (bookingId) => {
+    const updated = bookedServices.filter(b => b.id !== bookingId);
+    setBookedServices(updated);
+    await saveUserField('bookedServices', updated);
+  };
+
+  const handleUpdateBookingStatus = async (bookingId, newStatus) => {
+    const updated = bookedServices.map(b => b.id === bookingId ? { ...b, status: newStatus } : b);
+    setBookedServices(updated);
+    await saveUserField('bookedServices', updated);
   };
 
   const [showGuestModal, setShowGuestModal] = useState(false);
@@ -992,7 +1130,494 @@ export default function App() {
       </div>
     );
   };
-  // -- التحقق قبل عرض التطبيق --
+
+  // ==========================================
+  // --- 🌟 تبويب الخدمات والموردين (Services Tab) ---
+  // ==========================================
+  const ServicesTab = () => {
+    const filteredTemplates = SERVICE_TEMPLATES.filter((item) => {
+      const matchesCategory = selectedServiceCategory === 'all' || item.category === selectedServiceCategory;
+      const query = serviceSearchQuery.toLowerCase().trim();
+      if (!query) return matchesCategory;
+
+      return (
+        matchesCategory &&
+        (item.nameAr.toLowerCase().includes(query) ||
+          item.nameEn.toLowerCase().includes(query) ||
+          item.descriptionAr.toLowerCase().includes(query) ||
+          item.descriptionEn.toLowerCase().includes(query) ||
+          item.cityAr.toLowerCase().includes(query) ||
+          item.cityEn.toLowerCase().includes(query))
+      );
+    });
+
+    const renderCatIcon = (categoryId, size = 18) => {
+      switch (categoryId) {
+        case 'venues': return <Building2 size={size} />;
+        case 'decor': return <Flower2 size={size} />;
+        case 'sound_media': return <Music size={size} />;
+        case 'photography': return <Camera size={size} />;
+        case 'catering': return <UtensilsCrossed size={size} />;
+        case 'beauty': return <Sparkles size={size} />;
+        default: return <Sparkles size={size} />;
+      }
+    };
+
+    const coupleDisplayName = couple.groom && couple.bride ? `${couple.groom} و ${couple.bride}` : (couple.groom || couple.bride || '');
+
+    return (
+      <div className="space-y-6">
+        {/* Banner Header */}
+        <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-rose-600 text-white p-6 sm:p-8 rounded-3xl shadow-lg relative overflow-hidden">
+          <div className="absolute -bottom-8 -right-8 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+          <div className="absolute top-0 right-1/4 w-32 h-32 bg-amber-400/20 rounded-full blur-xl"></div>
+
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div>
+              <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3.5 py-1 rounded-full text-xs font-bold mb-3 border border-white/20">
+                <Store size={14} />
+                <span>{t.servicesDirectory}</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-black mb-2">
+                {isRtl ? 'دليل خدمات ومراسم الزفاف' : 'Wedding Services & Vendors Hub'}
+              </h2>
+              <p className="text-amber-100 text-sm sm:text-base max-w-xl font-medium">
+                {isRtl
+                  ? 'تصفح نخبة من قاعات الزفاف، الكوش، الصوتيات، والتصوير. تواصل فوراً عبر واتساب وأضف ما تختاره إلى خطتك.'
+                  : 'Discover vetted wedding venues, koshas, audio bands, and photography. Inquire directly on WhatsApp and add to your bookings.'}
+              </p>
+            </div>
+
+            {/* Quick Add Custom Vendor Button */}
+            <button
+              onClick={() => setShowAddCustomServiceModal(true)}
+              className="bg-white text-amber-800 hover:bg-amber-50 font-bold px-5 py-3 rounded-2xl shadow-md transition flex items-center justify-center gap-2 self-start md:self-auto shrink-0"
+            >
+              <Plus size={18} />
+              <span>{t.addCustomService}</span>
+            </button>
+          </div>
+
+          {/* Sub-Tabs Switcher */}
+          <div className="flex items-center gap-2 mt-6 pt-6 border-t border-white/20">
+            <button
+              onClick={() => setServicesSubTab('templates')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition ${
+                servicesSubTab === 'templates'
+                  ? 'bg-white text-amber-800 shadow-md'
+                  : 'bg-white/15 text-white hover:bg-white/25'
+              }`}
+            >
+              <Store size={16} />
+              <span>{t.servicesDirectory}</span>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                servicesSubTab === 'templates' ? 'bg-amber-100 text-amber-800' : 'bg-white/20 text-white'
+              }`}>
+                {SERVICE_TEMPLATES.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setServicesSubTab('myBookings')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition ${
+                servicesSubTab === 'myBookings'
+                  ? 'bg-white text-amber-800 shadow-md'
+                  : 'bg-white/15 text-white hover:bg-white/25'
+              }`}
+            >
+              <BookmarkCheck size={16} />
+              <span>{t.myBookings}</span>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                servicesSubTab === 'myBookings' ? 'bg-amber-100 text-amber-800' : 'bg-white/20 text-white'
+              }`}>
+                {bookedServices.length}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* -------------------- 1. TAB: TEMPLATES DIRECTORY -------------------- */}
+        {servicesSubTab === 'templates' && (
+          <div className="space-y-6">
+            {/* Search and Category Filter Bar */}
+            <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-gray-200 space-y-4">
+              {/* Search input */}
+              <div className="relative">
+                <Search size={18} className={`absolute top-1/2 -translate-y-1/2 text-gray-400 ${isRtl ? 'right-4' : 'left-4'}`} />
+                <input
+                  type="text"
+                  value={serviceSearchQuery}
+                  onChange={(e) => setServiceSearchQuery(e.target.value)}
+                  placeholder={t.searchServices}
+                  className={`w-full bg-gray-50 border border-gray-200 rounded-2xl py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition ${
+                    isRtl ? 'pr-11 pl-4' : 'pl-11 pr-4'
+                  }`}
+                />
+                {serviceSearchQuery && (
+                  <button
+                    onClick={() => setServiceSearchQuery('')}
+                    className={`absolute top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 ${isRtl ? 'left-3' : 'right-3'}`}
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+
+              {/* Categories Scrollable Pills */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+                {SERVICE_CATEGORIES.map((cat) => {
+                  const isActive = selectedServiceCategory === cat.id;
+                  const count = cat.id === 'all'
+                    ? SERVICE_TEMPLATES.length
+                    : SERVICE_TEMPLATES.filter((s) => s.category === cat.id).length;
+
+                  return (
+                    <button
+                      key={cat.id}
+                      onClick={() => setSelectedServiceCategory(cat.id)}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold shrink-0 transition-all ${
+                        isActive
+                          ? 'bg-amber-600 text-white shadow-md shadow-amber-200 scale-[1.02]'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {renderCatIcon(cat.id, 16)}
+                      <span>{isRtl ? cat.labelAr : cat.labelEn}</span>
+                      <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-semibold ${
+                        isActive ? 'bg-amber-700 text-white' : 'bg-gray-200 text-gray-700'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Services Grid */}
+            {filteredTemplates.length === 0 ? (
+              <div className="bg-white rounded-3xl p-12 text-center border border-gray-200">
+                <Store size={48} className="text-gray-300 mx-auto mb-3" />
+                <h3 className="font-bold text-gray-700 text-lg mb-1">{t.noServicesFound}</h3>
+                <p className="text-gray-400 text-sm mb-4">جرب البحث بكلمة مختلفة أو تغيير الفئة المحددة</p>
+                <button
+                  onClick={() => { setSelectedServiceCategory('all'); setServiceSearchQuery(''); }}
+                  className="px-4 py-2 bg-amber-100 text-amber-800 rounded-xl text-sm font-bold hover:bg-amber-200 transition"
+                >
+                  إعادة ضبط الفلاتر
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredTemplates.map((item) => {
+                  const isBooked = bookedServices.some((b) => b.templateId === item.id);
+                  const whatsAppLink = createWhatsAppInquiryLink(
+                    item.whatsapp,
+                    isRtl ? item.nameAr : item.nameEn,
+                    couple.date,
+                    coupleDisplayName
+                  );
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="bg-white rounded-3xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-lg transition flex flex-col group"
+                    >
+                      {/* Image Header with Badges */}
+                      <div className="relative h-48 bg-gray-100 overflow-hidden">
+                        <img
+                          src={item.images[0]}
+                          alt={item.nameAr}
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20"></div>
+
+                        {/* Top Badges */}
+                        <div className="absolute top-3 inset-x-3 flex justify-between items-center pointer-events-none">
+                          <span className="bg-white/90 backdrop-blur-md text-gray-800 text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
+                            {renderCatIcon(item.category, 14)}
+                            <span>
+                              {isRtl
+                                ? SERVICE_CATEGORIES.find((c) => c.id === item.category)?.labelAr
+                                : SERVICE_CATEGORIES.find((c) => c.id === item.category)?.labelEn}
+                            </span>
+                          </span>
+
+                          <span className="bg-amber-600/95 backdrop-blur-md text-white text-xs font-extrabold px-2.5 py-1 rounded-full shadow-sm">
+                            {isRtl ? item.badgeAr : item.badgeEn}
+                          </span>
+                        </div>
+
+                        {/* Bottom image overlay: Preview button and rating */}
+                        <div className="absolute bottom-3 inset-x-3 flex justify-between items-center text-white">
+                          <button
+                            onClick={() => setActivePhotoGallery(item)}
+                            className="bg-black/60 hover:bg-black/80 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 transition"
+                          >
+                            <Eye size={13} />
+                            <span>{t.viewPhotos} ({item.images.length})</span>
+                          </button>
+
+                          <div className="flex items-center gap-1 bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-full text-xs font-bold">
+                            <Star size={13} className="text-yellow-400 fill-yellow-400" />
+                            <span>{item.rating}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card Content */}
+                      <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                        <div className="space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <h3 className="font-extrabold text-gray-900 text-lg leading-snug group-hover:text-amber-700 transition">
+                              {isRtl ? item.nameAr : item.nameEn}
+                            </h3>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 text-gray-500 text-xs font-semibold">
+                            <MapPin size={14} className="text-amber-600 shrink-0" />
+                            <span>{isRtl ? item.cityAr : item.cityEn}</span>
+                          </div>
+
+                          <p className="text-gray-600 text-xs sm:text-sm line-clamp-2 leading-relaxed">
+                            {isRtl ? item.descriptionAr : item.descriptionEn}
+                          </p>
+
+                          {/* Price Estimate pill */}
+                          <div className="bg-amber-50/80 border border-amber-200/60 rounded-xl px-3 py-2 flex items-center justify-between">
+                            <span className="text-xs text-amber-800 font-bold">{t.priceEstimate}:</span>
+                            <span className="text-xs font-black text-amber-900">
+                              {isRtl ? item.priceEstimateAr : item.priceEstimateEn}
+                            </span>
+                          </div>
+
+                          {/* Feature tags */}
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {(isRtl ? item.featuresAr : item.featuresEn).slice(0, 2).map((feat, i) => (
+                              <span
+                                key={i}
+                                className="bg-gray-100 text-gray-600 text-[11px] font-medium px-2.5 py-0.5 rounded-lg"
+                              >
+                                • {feat}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="space-y-2 pt-2 border-t border-gray-100">
+                          {/* Top Row: WhatsApp Chat + Call */}
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={whatsAppLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-sm transition"
+                            >
+                              <MessageCircle size={16} />
+                              <span>{t.contactWhatsApp}</span>
+                            </a>
+
+                            <a
+                              href={`tel:${item.phone}`}
+                              className="border border-gray-200 hover:border-amber-500 hover:bg-amber-50 text-gray-700 hover:text-amber-800 p-2.5 rounded-xl transition flex items-center justify-center"
+                              title={t.callPhone}
+                            >
+                              <Phone size={16} />
+                            </a>
+                          </div>
+
+                          {/* Bottom Row: Add to My Bookings toggle */}
+                          <button
+                            onClick={() => handleToggleBooking(item)}
+                            className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                              isBooked
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200'
+                                : 'bg-gray-50 text-gray-700 hover:bg-amber-50 hover:text-amber-800 border border-gray-200'
+                            }`}
+                          >
+                            {isBooked ? (
+                              <>
+                                <Check size={14} />
+                                <span>{t.inBookings}</span>
+                              </>
+                            ) : (
+                              <>
+                                <BookmarkPlus size={14} />
+                                <span>{t.addToBookings}</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* -------------------- 2. TAB: MY BOOKINGS -------------------- */}
+        {servicesSubTab === 'myBookings' && (
+          <div className="space-y-6">
+            {bookedServices.length === 0 ? (
+              <div className="bg-white rounded-3xl p-12 text-center border border-gray-200">
+                <div className="w-16 h-16 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <BookmarkCheck size={32} />
+                </div>
+                <h3 className="font-extrabold text-gray-800 text-xl mb-2">{t.noBookingsYet}</h3>
+                <p className="text-gray-500 text-sm max-w-md mx-auto mb-6">
+                  {t.startBrowsing}
+                </p>
+                <button
+                  onClick={() => setServicesSubTab('templates')}
+                  className="bg-amber-600 text-white font-bold px-6 py-3 rounded-2xl hover:bg-amber-700 shadow-md transition inline-flex items-center gap-2"
+                >
+                  <Store size={18} />
+                  <span>{t.servicesDirectory}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Bookings Summary Header */}
+                <div className="bg-white p-4 rounded-2xl border border-gray-200 flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="bg-amber-100 text-amber-800 font-black px-3 py-1 rounded-xl text-sm">
+                      {bookedServices.length} {t.myBookingsCount}
+                    </span>
+                    <span className="text-gray-500 text-xs">
+                      {isRtl ? 'قائمتك لمتابعة عقود وحجوزات الزفاف' : 'Track your vendor contracts and reservations'}
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => setShowAddCustomServiceModal(true)}
+                    className="text-amber-700 hover:text-amber-800 font-bold text-xs sm:text-sm flex items-center gap-1.5"
+                  >
+                    <Plus size={16} />
+                    <span>{t.addCustomService}</span>
+                  </button>
+                </div>
+
+                {/* Bookings List Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {bookedServices.map((booking) => {
+                    const whatsAppLink = createWhatsAppInquiryLink(
+                      booking.whatsapp,
+                      booking.name,
+                      couple.date,
+                      coupleDisplayName
+                    );
+
+                    return (
+                      <div
+                        key={booking.id}
+                        className="bg-white rounded-3xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition flex flex-col justify-between space-y-4"
+                      >
+                        <div className="flex gap-4">
+                          {booking.image && (
+                            <img
+                              src={booking.image}
+                              alt={booking.name}
+                              className="w-20 h-20 rounded-2xl object-cover shrink-0"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-lg inline-flex items-center gap-1">
+                                {renderCatIcon(booking.category, 12)}
+                                <span>
+                                  {isRtl
+                                    ? SERVICE_CATEGORIES.find((c) => c.id === booking.category)?.labelAr || booking.category
+                                    : SERVICE_CATEGORIES.find((c) => c.id === booking.category)?.labelEn || booking.category}
+                                </span>
+                              </span>
+
+                              <button
+                                onClick={() => handleDeleteBookedService(booking.id)}
+                                className="text-gray-300 hover:text-rose-600 transition p-1"
+                                title="حذف من الحجوزات"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+
+                            <h4 className="font-extrabold text-gray-900 text-base truncate mb-1">
+                              {booking.name}
+                            </h4>
+
+                            <div className="flex items-center gap-1 text-gray-500 text-xs mb-2">
+                              <MapPin size={12} className="text-amber-600" />
+                              <span>{booking.city || (isRtl ? 'غير محدد' : 'N/A')}</span>
+                            </div>
+
+                            {booking.agreedCost && (
+                              <div className="text-xs font-bold text-gray-700">
+                                <span>{t.agreedCost}: </span>
+                                <span className="text-amber-700 font-black">{booking.agreedCost}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Status selector + Contact buttons */}
+                        <div className="pt-3 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3">
+                          {/* Status Pill Dropdown */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500 font-semibold">{t.bookingStatus}:</span>
+                            <select
+                              value={booking.status || 'confirmed'}
+                              onChange={(e) => handleUpdateBookingStatus(booking.id, e.target.value)}
+                              className={`text-xs font-bold rounded-xl px-2.5 py-1 border outline-none cursor-pointer ${
+                                booking.status === 'confirmed'
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  : booking.status === 'negotiating'
+                                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                  : 'bg-blue-50 text-blue-800 border-blue-200'
+                              }`}
+                            >
+                              <option value="confirmed">{t.statusConfirmed}</option>
+                              <option value="negotiating">{t.statusNegotiating}</option>
+                              <option value="inquiry">{t.statusInquiry}</option>
+                            </select>
+                          </div>
+
+                          {/* Quick WhatsApp & Call triggers */}
+                          <div className="flex items-center gap-2">
+                            {booking.whatsapp && (
+                              <a
+                                href={whatsAppLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 border border-emerald-200"
+                              >
+                                <MessageCircle size={14} />
+                                <span>واتساب</span>
+                              </a>
+                            )}
+                            {booking.phone && (
+                              <a
+                                href={`tel:${booking.phone}`}
+                                className="bg-gray-50 text-gray-700 hover:bg-amber-500 hover:text-white px-2.5 py-1.5 rounded-xl text-xs transition border border-gray-200"
+                              >
+                                <Phone size={14} />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // 1. إذا كان التطبيق لسه يتأكد من حالة المستخدم، نعرض شاشة تحميل بسيطة
   if (isAuthLoading) {
@@ -1238,7 +1863,7 @@ export default function App() {
           {activeTab === 'guests' && GuestsTab()}
           {activeTab === 'budget' && BudgetTab()}
           {activeTab === 'team' && TeamTab()}
-          {activeTab === 'services' && <div className="p-8 text-center text-gray-500">قسم الخدمات (قريباً)</div>}
+          {activeTab === 'services' && ServicesTab()}
         </main>
       </div>
 
@@ -1591,6 +2216,258 @@ export default function App() {
               <div className="flex justify-end gap-2 mt-6">
                 <button type="button" onClick={() => setShowTeamMemberModal(null)} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition">{t.cancel}</button>
                 <button type="submit" className="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition">{t.save}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- 🖼️ مودال استعراض صور الخدمة (Photo Gallery Modal) --- */}
+      {activePhotoGallery && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between bg-white z-10">
+              <div>
+                <h3 className="font-extrabold text-gray-900 text-lg sm:text-xl">
+                  {isRtl ? activePhotoGallery.nameAr : activePhotoGallery.nameEn}
+                </h3>
+                <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+                  <MapPin size={12} className="text-amber-600" />
+                  <span>{isRtl ? activePhotoGallery.cityAr : activePhotoGallery.cityEn}</span>
+                  <span>•</span>
+                  <span className="text-amber-700 font-bold">
+                    {isRtl ? activePhotoGallery.priceEstimateAr : activePhotoGallery.priceEstimateEn}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setActivePhotoGallery(null)}
+                className="p-2 text-gray-400 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-full transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Image Slider / Gallery Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {activePhotoGallery.images.map((imgUrl, idx) => (
+                  <div key={idx} className="relative rounded-2xl overflow-hidden bg-gray-100 aspect-video group shadow-sm">
+                    <img
+                      src={imgUrl}
+                      alt={`${activePhotoGallery.nameAr} - ${idx + 1}`}
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Description */}
+              <div className="bg-amber-50/70 p-4 rounded-2xl border border-amber-200/60 mt-4">
+                <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
+                  {isRtl ? activePhotoGallery.descriptionAr : activePhotoGallery.descriptionEn}
+                </p>
+              </div>
+            </div>
+
+            {/* Footer with Actions */}
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  handleToggleBooking(activePhotoGallery);
+                }}
+                className="text-xs sm:text-sm font-bold text-gray-700 hover:text-amber-800 px-4 py-2.5 rounded-xl border border-gray-200 bg-white transition flex items-center gap-1.5"
+              >
+                {bookedServices.some(b => b.templateId === activePhotoGallery.id) ? (
+                  <>
+                    <Check size={16} className="text-emerald-600" />
+                    <span>{t.inBookings}</span>
+                  </>
+                ) : (
+                  <>
+                    <BookmarkPlus size={16} />
+                    <span>{t.addToBookings}</span>
+                  </>
+                )}
+              </button>
+
+              <a
+                href={createWhatsAppInquiryLink(
+                  activePhotoGallery.whatsapp,
+                  isRtl ? activePhotoGallery.nameAr : activePhotoGallery.nameEn,
+                  couple.date,
+                  couple.groom && couple.bride ? `${couple.groom} و ${couple.bride}` : ''
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-5 rounded-xl text-xs sm:text-sm flex items-center gap-2 shadow-sm transition"
+              >
+                <MessageCircle size={16} />
+                <span>{t.contactWhatsApp}</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- ➕ مودال إضافة مزود خدمة خاص (Add Custom Service Modal) --- */}
+      {showAddCustomServiceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl w-full max-w-lg p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-gray-100 mb-4">
+              <div className="flex items-center gap-2">
+                <Store size={22} className="text-amber-600" />
+                <h3 className="text-xl font-bold text-gray-900">{t.addCustomService}</h3>
+              </div>
+              <button
+                onClick={() => setShowAddCustomServiceModal(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 bg-gray-100 rounded-full transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                handleSaveCustomService({
+                  name: formData.get('name'),
+                  category: formData.get('category'),
+                  city: formData.get('city'),
+                  phone: formData.get('phone'),
+                  whatsapp: formData.get('whatsapp') || formData.get('phone'),
+                  agreedCost: formData.get('agreedCost'),
+                  status: formData.get('status'),
+                  notes: formData.get('notes'),
+                  image: formData.get('image') || null
+                });
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">{t.serviceProviderName} *</label>
+                <input
+                  type="text"
+                  name="name"
+                  required
+                  placeholder="مثال: قاعة ومخدرة التاج"
+                  className="w-full border border-gray-300 rounded-2xl p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">{t.serviceCategory} *</label>
+                  <select
+                    name="category"
+                    required
+                    className="w-full border border-gray-300 rounded-2xl p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none bg-white"
+                  >
+                    {SERVICE_CATEGORIES.filter(c => c.id !== 'all').map(c => (
+                      <option key={c.id} value={c.id}>
+                        {isRtl ? c.labelAr : c.labelEn}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">{t.cityLocation}</label>
+                  <input
+                    type="text"
+                    name="city"
+                    placeholder="مثال: المكلا - فوه"
+                    className="w-full border border-gray-300 rounded-2xl p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">{t.phoneNumber} *</label>
+                  <input
+                    type="tel"
+                    name="phone"
+                    required
+                    placeholder="+967 77X XXX XXX"
+                    dir="ltr"
+                    className="w-full border border-gray-300 rounded-2xl p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none text-right"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">رقم واتساب (اختياري)</label>
+                  <input
+                    type="tel"
+                    name="whatsapp"
+                    placeholder="96777XXXXXXX"
+                    dir="ltr"
+                    className="w-full border border-gray-300 rounded-2xl p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none text-right"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">{t.agreedCost}</label>
+                  <input
+                    type="text"
+                    name="agreedCost"
+                    placeholder="مثال: 450,000"
+                    className="w-full border border-gray-300 rounded-2xl p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">{t.bookingStatus}</label>
+                  <select
+                    name="status"
+                    className="w-full border border-gray-300 rounded-2xl p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none bg-white"
+                  >
+                    <option value="confirmed">{t.statusConfirmed}</option>
+                    <option value="negotiating">{t.statusNegotiating}</option>
+                    <option value="inquiry">{t.statusInquiry}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">رابط صورة (اختياري)</label>
+                <input
+                  type="url"
+                  name="image"
+                  placeholder="https://..."
+                  className="w-full border border-gray-300 rounded-2xl p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">{t.notes}</label>
+                <textarea
+                  name="notes"
+                  rows={2}
+                  placeholder="أي تفاصيل خاصة بالاتفاق أو الشروط..."
+                  className="w-full border border-gray-300 rounded-2xl p-2.5 text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddCustomServiceModal(false)}
+                  className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition text-sm"
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition text-sm shadow-md"
+                >
+                  {t.save}
+                </button>
               </div>
             </form>
           </div>
