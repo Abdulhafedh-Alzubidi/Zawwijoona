@@ -13,6 +13,10 @@ import {
   Building2, Eye, BookmarkCheck, BookmarkPlus, Check, Star, AlertCircle
 } from 'lucide-react';
 import { SERVICE_CATEGORIES, SERVICE_TEMPLATES, createWhatsAppInquiryLink } from './data/servicesData';
+import WeddingModeSelector from './components/WeddingModeSelector';
+import MassWeddingDashboard from './components/MassWeddingDashboard';
+import MassWeddingSetupModal from './components/MassWeddingSetupModal';
+import { DEFAULT_MASS_WEDDING_DATA } from './data/massWeddingTemplates';
 
 // --- Dictionary for Bilingual Support ---
 const dict = {
@@ -144,6 +148,9 @@ const dict = {
     // Form buttons
     save: "حفظ",
     cancel: "إلغاء",
+    massWedding: "عرس جماعي",
+    individualWedding: "زواج فردي",
+    switchMode: "تبديل الوضع",
   },
   en: {
     appName: "Maraseem",
@@ -271,6 +278,9 @@ const dict = {
     // Form buttons
     save: "Save",
     cancel: "Cancel",
+    massWedding: "Mass Wedding",
+    individualWedding: "Individual Wedding",
+    switchMode: "Switch Mode",
   }
 };
 
@@ -334,6 +344,10 @@ export default function App() {
       setIncomes([]);
       setExpenses([]);
       setBookedServices([]);
+      setWeddingMode(null);
+      setMassWeddingData(DEFAULT_MASS_WEDDING_DATA);
+      setShowModeSelectorModal(false);
+      setShowMassSetupModal(false);
       setProfileInfo({
         username: '',
         email: '',
@@ -412,6 +426,10 @@ export default function App() {
   };
   // 1. ALL HOOKS DECLARED AT THE TOP LEVEL
   const [lang, setLang] = useState('ar');
+  const [weddingMode, setWeddingMode] = useState(null); // 'individual' | 'mass' | null
+  const [massWeddingData, setMassWeddingData] = useState(DEFAULT_MASS_WEDDING_DATA);
+  const [showModeSelectorModal, setShowModeSelectorModal] = useState(false);
+  const [showMassSetupModal, setShowMassSetupModal] = useState(false);
   const [isSetupComplete, setIsSetupComplete] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -461,6 +479,8 @@ export default function App() {
             }
 
             // 2. استرجاع باقي الأقسام (إن وُجدت)
+            if (data.weddingMode) setWeddingMode(data.weddingMode);
+            if (data.massWeddingData) setMassWeddingData(data.massWeddingData);
             if (data.guests) setGuests(data.guests);
             if (data.expenses) setExpenses(data.expenses);
             if (data.events) setEvents(data.events);
@@ -516,6 +536,31 @@ export default function App() {
     } catch (error) {
       console.error(`خطأ في حفظ ${field} في فايربيس:`, error);
     }
+  };
+
+  const handleSelectMode = async (mode) => {
+    setWeddingMode(mode);
+    setShowModeSelectorModal(false);
+    await saveUserField('weddingMode', mode);
+  };
+
+  const handleSaveMassWeddingSetup = async (setupFormData) => {
+    const updated = {
+      ...massWeddingData,
+      info: {
+        ...massWeddingData.info,
+        ...setupFormData,
+        isConfigured: true
+      }
+    };
+    setMassWeddingData(updated);
+    setShowMassSetupModal(false);
+    await saveUserField('massWeddingData', updated);
+  };
+
+  const handleUpdateMassWeddingData = async (newMassData) => {
+    setMassWeddingData(newMassData);
+    await saveUserField('massWeddingData', newMassData);
   };
 
   const handleDeleteGuest = async (guestId) => {
@@ -1202,34 +1247,30 @@ export default function App() {
           <div className="flex items-center gap-2 mt-6 pt-6 border-t border-white/20">
             <button
               onClick={() => setServicesSubTab('templates')}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition ${
-                servicesSubTab === 'templates'
-                  ? 'bg-white text-amber-800 shadow-md'
-                  : 'bg-white/15 text-white hover:bg-white/25'
-              }`}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition ${servicesSubTab === 'templates'
+                ? 'bg-white text-amber-800 shadow-md'
+                : 'bg-white/15 text-white hover:bg-white/25'
+                }`}
             >
               <Store size={16} />
               <span>{t.servicesDirectory}</span>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${
-                servicesSubTab === 'templates' ? 'bg-amber-100 text-amber-800' : 'bg-white/20 text-white'
-              }`}>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${servicesSubTab === 'templates' ? 'bg-amber-100 text-amber-800' : 'bg-white/20 text-white'
+                }`}>
                 {SERVICE_TEMPLATES.length}
               </span>
             </button>
 
             <button
               onClick={() => setServicesSubTab('myBookings')}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition ${
-                servicesSubTab === 'myBookings'
-                  ? 'bg-white text-amber-800 shadow-md'
-                  : 'bg-white/15 text-white hover:bg-white/25'
-              }`}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition ${servicesSubTab === 'myBookings'
+                ? 'bg-white text-amber-800 shadow-md'
+                : 'bg-white/15 text-white hover:bg-white/25'
+                }`}
             >
               <BookmarkCheck size={16} />
               <span>{t.myBookings}</span>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${
-                servicesSubTab === 'myBookings' ? 'bg-amber-100 text-amber-800' : 'bg-white/20 text-white'
-              }`}>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${servicesSubTab === 'myBookings' ? 'bg-amber-100 text-amber-800' : 'bg-white/20 text-white'
+                }`}>
                 {bookedServices.length}
               </span>
             </button>
@@ -1249,9 +1290,8 @@ export default function App() {
                   value={serviceSearchQuery}
                   onChange={(e) => setServiceSearchQuery(e.target.value)}
                   placeholder={t.searchServices}
-                  className={`w-full bg-gray-50 border border-gray-200 rounded-2xl py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition ${
-                    isRtl ? 'pr-11 pl-4' : 'pl-11 pr-4'
-                  }`}
+                  className={`w-full bg-gray-50 border border-gray-200 rounded-2xl py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition ${isRtl ? 'pr-11 pl-4' : 'pl-11 pr-4'
+                    }`}
                 />
                 {serviceSearchQuery && (
                   <button
@@ -1275,17 +1315,15 @@ export default function App() {
                     <button
                       key={cat.id}
                       onClick={() => setSelectedServiceCategory(cat.id)}
-                      className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold shrink-0 transition-all ${
-                        isActive
-                          ? 'bg-amber-600 text-white shadow-md shadow-amber-200 scale-[1.02]'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold shrink-0 transition-all ${isActive
+                        ? 'bg-amber-600 text-white shadow-md shadow-amber-200 scale-[1.02]'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
                     >
                       {renderCatIcon(cat.id, 16)}
                       <span>{isRtl ? cat.labelAr : cat.labelEn}</span>
-                      <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-semibold ${
-                        isActive ? 'bg-amber-700 text-white' : 'bg-gray-200 text-gray-700'
-                      }`}>
+                      <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-semibold ${isActive ? 'bg-amber-700 text-white' : 'bg-gray-200 text-gray-700'
+                        }`}>
                         {count}
                       </span>
                     </button>
@@ -1431,11 +1469,10 @@ export default function App() {
                           {/* Bottom Row: Add to My Bookings toggle */}
                           <button
                             onClick={() => handleToggleBooking(item)}
-                            className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                              isBooked
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200'
-                                : 'bg-gray-50 text-gray-700 hover:bg-amber-50 hover:text-amber-800 border border-gray-200'
-                            }`}
+                            className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${isBooked
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200'
+                              : 'bg-gray-50 text-gray-700 hover:bg-amber-50 hover:text-amber-800 border border-gray-200'
+                              }`}
                           >
                             {isBooked ? (
                               <>
@@ -1570,13 +1607,12 @@ export default function App() {
                             <select
                               value={booking.status || 'confirmed'}
                               onChange={(e) => handleUpdateBookingStatus(booking.id, e.target.value)}
-                              className={`text-xs font-bold rounded-xl px-2.5 py-1 border outline-none cursor-pointer ${
-                                booking.status === 'confirmed'
-                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                  : booking.status === 'negotiating'
+                              className={`text-xs font-bold rounded-xl px-2.5 py-1 border outline-none cursor-pointer ${booking.status === 'confirmed'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : booking.status === 'negotiating'
                                   ? 'bg-amber-50 text-amber-800 border-amber-200'
                                   : 'bg-blue-50 text-blue-800 border-blue-200'
-                              }`}
+                                }`}
                             >
                               <option value="confirmed">{t.statusConfirmed}</option>
                               <option value="negotiating">{t.statusNegotiating}</option>
@@ -1634,8 +1670,20 @@ export default function App() {
       toggleLang={toggleLang}
       isRtl={isRtl} />;
   }
-  // 4. EARLY RETURNS
-  if (!isSetupComplete) {
+
+  // 3. إذا لم يقم المستخدم بعد بتحديد وضع التخطيط (فردي أو جماعي)، نعرض شاشة اختيار الوضع
+  if (!weddingMode) {
+    return (
+      <WeddingModeSelector
+        onSelectMode={handleSelectMode}
+        currentMode={weddingMode}
+        isRtl={isRtl}
+      />
+    );
+  }
+
+  // 4. EARLY RETURNS (للزواج الفردي فقط في حال عدم اكتمال الإعداد)
+  if (weddingMode === 'individual' && !isSetupComplete) {
     return (
       <div dir={isRtl ? 'rtl' : 'ltr'} className={`min-h-screen bg-amber-50 flex items-center justify-center p-4 font-sans ${isRtl ? 'font-arabic' : ''}`}>
         <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full border border-amber-100">
@@ -1713,17 +1761,41 @@ export default function App() {
             <span>{t.appName}</span>
           </button>
 
-          {/* Right: Language Switch Button */}
-          <button
-            onClick={toggleLang}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:text-amber-600 hover:bg-amber-50 transition border border-gray-200 bg-white"
-            title={lang === 'ar' ? 'Switch to English' : 'التبديل للعربية'}
-          >
-            <Globe size={18} />
-            <span className="hidden sm:inline text-sm font-medium">
-              {lang === 'ar' ? 'EN' : 'عر'}
-            </span>
-          </button>
+          {/* Right: Mode Switcher & Language Switch Button */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowModeSelectorModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black transition border shadow-sm bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 text-amber-900 hover:border-amber-400 hover:shadow"
+              title={isRtl ? 'تبديل وضع التخطيط (فردي / جماعي)' : 'Switch Planning Mode'}
+            >
+              {weddingMode === 'mass' ? (
+                <>
+                  <Users size={14} className="text-amber-700" />
+                  <span className="hidden sm:inline">{isRtl ? 'عرس جماعي' : 'Mass Wedding'}</span>
+                </>
+              ) : (
+                <>
+                  <CalendarHeart size={14} className="text-rose-600" />
+                  <span className="hidden sm:inline">{isRtl ? 'زواج فردي' : 'Individual'}</span>
+                </>
+              )}
+              <span className="text-[10px] text-amber-800 font-bold underline decoration-dotted bg-amber-100/70 px-1.5 py-0.5 rounded-md">
+                {isRtl ? 'تبديل' : 'Switch'}
+              </span>
+            </button>
+
+            <button
+              onClick={toggleLang}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:text-amber-600 hover:bg-amber-50 transition border border-gray-200 bg-white"
+              title={lang === 'ar' ? 'Switch to English' : 'التبديل للعربية'}
+            >
+              <Globe size={18} />
+              <span className="hidden sm:inline text-sm font-medium">
+                {lang === 'ar' ? 'EN' : 'عر'}
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* --- القائمة الجانبية الموحدة (Unified Mobile Drawer) --- */}
@@ -1798,6 +1870,23 @@ export default function App() {
                   </form>
                 )}
 
+                {/* وضع التخطيط الحالي في القائمة */}
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <div className="p-3 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-bold text-amber-900">
+                      {weddingMode === 'mass' ? <Users size={16} className="text-amber-700" /> : <CalendarHeart size={16} className="text-rose-600" />}
+                      <span>{weddingMode === 'mass' ? (isRtl ? 'عرس جماعي' : 'Mass Wedding') : (isRtl ? 'زواج فردي' : 'Individual Wedding')}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setShowModeSelectorModal(true); setIsProfileMenuOpen(false); }}
+                      className="px-2.5 py-1 rounded-xl bg-white text-amber-800 text-xs font-black shadow-sm border border-amber-200"
+                    >
+                      {isRtl ? 'تغيير' : 'Switch'}
+                    </button>
+                  </div>
+                </div>
+
                 {/* القسم الثاني: تبويبات التنقل (تظهر فقط في الجوال لأن الديسكتوب فيه الشريط الجانبي) */}
                 <div className="p-4 md:hidden">
                   <h4 className="text-xs font-bold text-gray-400 mb-3 px-2 uppercase tracking-wider">
@@ -1835,36 +1924,52 @@ export default function App() {
         )}
       </nav>
       {/* Main Container */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex gap-8">
-        {/* Sidebar */}
-        <aside className="hidden md:block w-64 shrink-0">
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5 sticky top-24">
-            <ul className="space-y-2">
-              {navItems.map((item) => (
-                <li key={item.id}>
-                  <button
-                    onClick={() => setActiveTab(item.id)}
-                    className={`w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl transition-all ${activeTab === item.id ? 'bg-gradient-to-r from-amber-50 to-orange-50 text-amber-700 font-black' : 'text-gray-500 font-bold hover:bg-gray-50'
-                      }`}
-                  >
-                    <div className={activeTab === item.id ? 'text-amber-600' : 'text-gray-400'}>{item.icon}</div>
-                    <span>{item.label}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </aside>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {weddingMode === 'mass' ? (
+          <main className="w-full pb-12">
+            <MassWeddingDashboard
+              data={massWeddingData}
+              onUpdateData={handleUpdateMassWeddingData}
+              onOpenSettings={() => setShowMassSetupModal(true)}
+              onSwitchMode={() => setShowModeSelectorModal(true)}
+              isRtl={isRtl}
+              lang={lang}
+              generateWithGemini={generateWithGemini}
+            />
+          </main>
+        ) : (
+          <div className="flex gap-8">
+            {/* Sidebar */}
+            <aside className="hidden md:block w-64 shrink-0">
+              <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5 sticky top-24">
+                <ul className="space-y-2">
+                  {navItems.map((item) => (
+                    <li key={item.id}>
+                      <button
+                        onClick={() => setActiveTab(item.id)}
+                        className={`w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl transition-all ${activeTab === item.id ? 'bg-gradient-to-r from-amber-50 to-orange-50 text-amber-700 font-black' : 'text-gray-500 font-bold hover:bg-gray-50'
+                          }`}
+                      >
+                        <div className={activeTab === item.id ? 'text-amber-600' : 'text-gray-400'}>{item.icon}</div>
+                        <span>{item.label}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </aside>
 
-        {/* Content */}
-        <main className="flex-1 min-w-0 pb-12">
-          {activeTab === 'dashboard' && DashboardTab()}
-          {activeTab === 'planning' && PlanningTab()}
-          {activeTab === 'guests' && GuestsTab()}
-          {activeTab === 'budget' && BudgetTab()}
-          {activeTab === 'team' && TeamTab()}
-          {activeTab === 'services' && ServicesTab()}
-        </main>
+            {/* Content */}
+            <main className="flex-1 min-w-0 pb-12">
+              {activeTab === 'dashboard' && DashboardTab()}
+              {activeTab === 'planning' && PlanningTab()}
+              {activeTab === 'guests' && GuestsTab()}
+              {activeTab === 'budget' && BudgetTab()}
+              {activeTab === 'team' && TeamTab()}
+              {activeTab === 'services' && ServicesTab()}
+            </main>
+          </div>
+        )}
       </div>
 
       {/* --- MODALS SECTION --- */}
@@ -2472,6 +2577,25 @@ export default function App() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Mass Wedding Modals */}
+      {showModeSelectorModal && (
+        <WeddingModeSelector
+          onSelectMode={handleSelectMode}
+          currentMode={weddingMode}
+          isRtl={isRtl}
+          onClose={() => setShowModeSelectorModal(false)}
+        />
+      )}
+
+      {showMassSetupModal && (
+        <MassWeddingSetupModal
+          initialData={massWeddingData.info}
+          onSave={handleSaveMassWeddingSetup}
+          onCancel={() => setShowMassSetupModal(false)}
+          isRtl={isRtl}
+        />
       )}
 
       {/* Floating AI Chat Button & Window */}
