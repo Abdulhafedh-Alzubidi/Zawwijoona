@@ -535,33 +535,7 @@ export default function MassWeddingDashboard({
 
       </div>
 
-      {/* --- 3. SUB-TABS NAVIGATION (MD:HIDDEN on desktop where Sidebar handles navigation) --- */}
-      <div className="md:hidden flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none border-b border-gray-200 text-xs sm:text-sm font-bold">
-        {[
-          { id: 'overview', label: isRtl ? 'نظرة عامة' : 'Overview', icon: <Sparkles size={16} /> },
-          { id: 'couples', label: isRtl ? `سجل العرسان (${couples.length})` : `Couples (${couples.length})`, icon: <Users2 size={16} /> },
-          { id: 'committees', label: isRtl ? `اللجان الميدانية (${committees.length})` : `Committees (${committees.length})`, icon: <HeartHandshake size={16} /> },
-          { id: 'budget', label: isRtl ? 'الميزانية والرعايات' : 'Budget & Sponsors', icon: <Coins size={16} /> },
-          { id: 'schedule', label: isRtl ? 'جدول الفعاليات' : 'Schedule', icon: <Calendar size={16} /> },
-          { id: 'logistics', label: isRtl ? 'حاسبة الوليمة والشاهي والسقيا' : 'Banquet & Logistics', icon: <Utensils size={16} /> },
-          { id: 'ai', label: isRtl ? '✨ المساعد الذكي' : '✨ AI Assistant', icon: <Sparkles size={16} /> }
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveSubTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-3 border-b-2 whitespace-nowrap transition-all ${activeSubTab === tab.id
-              ? 'border-amber-600 text-amber-700 bg-amber-50/50 rounded-t-xl'
-              : 'border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300'
-              }`}
-          >
-            {tab.icon}
-            <span>{tab.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* --- 4. SUB-TAB CONTENT SECTIONS --- */}
+      {/* --- SUB-TAB CONTENT SECTIONS --- */}
 
       {/* === SUB-TAB 1: OVERVIEW === */}
       {activeSubTab === 'overview' && (

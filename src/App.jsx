@@ -1690,15 +1690,57 @@ export default function App() {
     );
   }
 
-  // Setup check (فقط إذا كان وضع فردي)
+  // Setup check (فقط إذا كان وضع فردي ولم تكتمل بيانات العروسين)
   if (weddingMode === 'individual' && !isSetupComplete) {
     return (
-      <SetupWizard
-        weddingData={weddingData}
-        onComplete={handleSetupComplete}
-        isRtl={isRtl}
-        lang={lang}
-      />
+      <div dir={isRtl ? 'rtl' : 'ltr'} className={`min-h-screen bg-amber-50 flex items-center justify-center p-4 font-sans ${isRtl ? 'font-arabic' : ''}`}>
+        <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full border border-amber-100">
+          <div className="text-center mb-8">
+            <CalendarHeart size={48} className="text-amber-500 mx-auto mb-4" />
+            <h1 className="text-3xl font-extrabold text-amber-900 mb-2">{t.appName}</h1>
+            <p className="text-gray-500 font-medium">{t.welcomeSetup}</p>
+          </div>
+
+          <form onSubmit={handleSetupSubmit} className="space-y-5">
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">{t.groomName}</label>
+              <input type="text" name="groom" defaultValue={couple.groom} required className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-gray-50 text-gray-800" placeholder="عمر" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">{t.brideName}</label>
+              <input type="text" name="bride" defaultValue={couple.bride} required className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-gray-50 text-gray-800" placeholder="فاطمة" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">{t.weddingDate}</label>
+              <input type="date" name="date" defaultValue={couple.date} min={todayStr} required className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-gray-50 text-gray-800" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">{t.initialBudget} ({t.currency})</label>
+              <input type="number" name="budget" defaultValue={couple.initialBudget} required min="0" className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-gray-50 text-gray-800" placeholder="2500000" />
+            </div>
+            <button type="submit" className="w-full bg-amber-600 text-white font-bold text-lg py-3 rounded-xl hover:bg-amber-700 transition shadow-lg mt-4">
+              {t.startPlanning}
+            </button>
+          </form>
+
+          <div className="mt-6 flex items-center justify-between text-xs text-gray-500">
+            <button
+              type="button"
+              onClick={() => handleSelectMode('mass')}
+              className="text-amber-700 hover:text-amber-800 font-bold hover:underline"
+            >
+              {isRtl ? '← العودة لوضع العرس الجماعي' : '← Switch to Mass Wedding'}
+            </button>
+            <button
+              type="button"
+              onClick={toggleLang}
+              className="text-gray-500 hover:text-amber-600 underline decoration-dotted"
+            >
+              {lang === 'ar' ? 'English' : 'العربية'}
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -1743,35 +1785,37 @@ export default function App() {
             <span className="truncate">{t.appName}</span>
           </button>
 
-          {/* Right: Mode Switcher & Language Switch Button */}
-          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-            {weddingMode ? (
-              <button
-                type="button"
-                onClick={() => setShowModeSelectorModal(true)}
-                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-black transition border shadow-2xs bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 text-amber-900 hover:border-amber-400"
-                title={isRtl ? 'تبديل وضع التخطيط (فردي / جماعي)' : 'Switch Planning Mode'}
-              >
-                {weddingMode === 'mass' ? (
-                  <>
-                    <Users size={13} className="text-amber-700" />
-                    <span className="hidden md:inline">{isRtl ? 'عرس جماعي' : 'Mass Wedding'}</span>
-                  </>
-                ) : (
-                  <>
-                    <CalendarHeart size={13} className="text-rose-600" />
-                    <span className="hidden md:inline">{isRtl ? 'زواج فردي' : 'Individual'}</span>
-                  </>
-                )}
-                <span className="text-[10px] text-amber-800 font-bold bg-amber-100/70 px-1.5 py-0.5 rounded-md">
-                  {isRtl ? 'تبديل' : 'Switch'}
-                </span>
-              </button>
-            ) : (
-              <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                <Sparkles size={13} className="text-amber-600" />
-                <span>{isRtl ? 'اختيار المسار' : 'Select Mode'}</span>
-              </span>
+          {/* Right: Mode Switcher Slider in Top Corner & Language Switch Button */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {weddingMode && (
+              <div className="inline-flex p-0.5 bg-gray-100/90 rounded-full border border-gray-200/80 shadow-inner shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleSelectMode('individual')}
+                  className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-black transition-all ${
+                    weddingMode === 'individual'
+                      ? 'bg-white text-rose-600 shadow-xs'
+                      : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                  title={isRtl ? 'زواج فردي' : 'Individual Wedding'}
+                >
+                  <CalendarHeart size={12} className={weddingMode === 'individual' ? 'text-rose-600' : 'text-gray-400'} />
+                  <span className="hidden xs:inline">{isRtl ? 'فردي' : 'Solo'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectMode('mass')}
+                  className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-black transition-all ${
+                    weddingMode === 'mass'
+                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs'
+                      : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                  title={isRtl ? 'عرس جماعي' : 'Mass Wedding'}
+                >
+                  <Users size={12} className={weddingMode === 'mass' ? 'text-white' : 'text-gray-400'} />
+                  <span className="hidden xs:inline">{isRtl ? 'جماعي' : 'Mass'}</span>
+                </button>
+              </div>
             )}
 
             <button
@@ -1802,13 +1846,46 @@ export default function App() {
               onClick={(e) => e.stopPropagation()}
               onTouchStart={(e) => e.stopPropagation()}
             >
-              {/* زر إغلاق القائمة (X) */}
-              <button
-                onClick={() => setIsProfileMenuOpen(false)}
-                className={`absolute top-4 ${isRtl ? 'left-4' : 'right-4'} p-2 text-gray-400 hover:text-gray-800 bg-gray-50 rounded-full z-10`}
-              >
-                <X size={20} />
-              </button>
+              {/* Drawer Top Header: Mode Slider in Top Corner & Close Button */}
+              <div className="p-3.5 px-4 border-b border-gray-100 flex items-center justify-between bg-white z-10 shrink-0">
+                {weddingMode ? (
+                  <div className="inline-flex p-0.5 bg-gray-100/90 rounded-full border border-gray-200/80 shadow-inner">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectMode('individual')}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black transition-all ${
+                        weddingMode === 'individual'
+                          ? 'bg-white text-rose-600 shadow-xs'
+                          : 'text-gray-500 hover:text-gray-800'
+                      }`}
+                    >
+                      <CalendarHeart size={12} className={weddingMode === 'individual' ? 'text-rose-600' : 'text-gray-400'} />
+                      <span>{isRtl ? 'زواج فردي' : 'Individual'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectMode('mass')}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black transition-all ${
+                        weddingMode === 'mass'
+                          ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs'
+                          : 'text-gray-500 hover:text-gray-800'
+                      }`}
+                    >
+                      <Users size={12} className={weddingMode === 'mass' ? 'text-white' : 'text-gray-400'} />
+                      <span>{isRtl ? 'عرس جماعي' : 'Mass'}</span>
+                    </button>
+                  </div>
+                ) : <div />}
+
+                {/* زر إغلاق القائمة (X) */}
+                <button
+                  type="button"
+                  onClick={() => setIsProfileMenuOpen(false)}
+                  className="p-1.5 text-gray-400 hover:text-gray-800 bg-gray-50 hover:bg-gray-100 rounded-full transition"
+                >
+                  <X size={18} />
+                </button>
+              </div>
 
               {/* --- المنطقة القابلة للتمرير --- */}
               <div className="flex-1 overflow-y-auto pb-6 flex flex-col">
@@ -1859,22 +1936,7 @@ export default function App() {
                   </form>
                 )}
 
-                {/* وضع التخطيط الحالي في القائمة */}
-                <div className="px-4 py-3 border-b border-gray-100">
-                  <div className="p-3 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs font-bold text-amber-900">
-                      {weddingMode === 'mass' ? <Users size={16} className="text-amber-700" /> : <CalendarHeart size={16} className="text-rose-600" />}
-                      <span>{weddingMode === 'mass' ? (isRtl ? 'عرس جماعي' : 'Mass Wedding') : (isRtl ? 'زواج فردي' : 'Individual Wedding')}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => { setShowModeSelectorModal(true); setIsProfileMenuOpen(false); }}
-                      className="px-2.5 py-1 rounded-xl bg-white text-amber-800 text-xs font-black shadow-sm border border-amber-200"
-                    >
-                      {isRtl ? 'تغيير' : 'Switch'}
-                    </button>
-                  </div>
-                </div>
+
 
                 {/* القسم الثاني: تبويبات التنقل (تظهر فقط في الجوال لأن الديسكتوب فيه الشريط الجانبي) */}
                 <div className="p-4 md:hidden">
