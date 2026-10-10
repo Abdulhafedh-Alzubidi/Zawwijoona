@@ -20,10 +20,17 @@ export default function MassWeddingDashboard({
   onSwitchMode,
   isRtl,
   lang,
-  generateWithGemini
+  generateWithGemini,
+  activeTab: controlledActiveTab,
+  onTabChange
 }) {
   // Tabs: 'overview' | 'couples' | 'committees' | 'budget' | 'schedule' | 'logistics' | 'ai'
-  const [activeSubTab, setActiveSubTab] = useState('overview');
+  const [internalActiveSubTab, setInternalActiveSubTab] = useState('overview');
+  const activeSubTab = controlledActiveTab !== undefined ? controlledActiveTab : internalActiveSubTab;
+  const setActiveSubTab = (tab) => {
+    setInternalActiveSubTab(tab);
+    if (onTabChange) onTabChange(tab);
+  };
 
   // --- Modals State ---
   const [showAddCoupleModal, setShowAddCoupleModal] = useState(false);
@@ -366,12 +373,12 @@ export default function MassWeddingDashboard({
           </div>
 
           {/* Action Buttons in Hero */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3 self-start md:self-center">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 self-stretch sm:self-auto justify-start sm:justify-end">
             {onOpenSettings && (
               <button
                 type="button"
                 onClick={onOpenSettings}
-                className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs sm:text-sm backdrop-blur-sm transition border border-white/20"
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs sm:text-sm backdrop-blur-sm transition border border-white/20"
                 title={isRtl ? 'تعديل بيانات العرس الجماعي' : 'Edit Event Info'}
               >
                 <Edit3 size={16} />
@@ -382,7 +389,7 @@ export default function MassWeddingDashboard({
             <button
               type="button"
               onClick={onSwitchMode}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-amber-950 font-black text-xs sm:text-sm shadow-md transition"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-amber-950 font-black text-xs sm:text-sm shadow-md transition"
               title={isRtl ? 'التبديل إلى تخطيط زفاف فردي' : 'Switch to Individual Wedding'}
             >
               <span>{isRtl ? '👰 التبديل لزواج فردي' : '👰 Switch to Individual'}</span>
@@ -528,8 +535,8 @@ export default function MassWeddingDashboard({
 
       </div>
 
-      {/* --- 3. SUB-TABS NAVIGATION --- */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none border-b border-gray-200 text-xs sm:text-sm font-bold">
+      {/* --- 3. SUB-TABS NAVIGATION (MD:HIDDEN on desktop where Sidebar handles navigation) --- */}
+      <div className="md:hidden flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none border-b border-gray-200 text-xs sm:text-sm font-bold">
         {[
           { id: 'overview', label: isRtl ? 'نظرة عامة' : 'Overview', icon: <Sparkles size={16} /> },
           { id: 'couples', label: isRtl ? `سجل العرسان (${couples.length})` : `Couples (${couples.length})`, icon: <Users2 size={16} /> },
@@ -2017,40 +2024,40 @@ function RateItemCard({
   isRtl
 }) {
   return (
-    <div className="p-3.5 bg-gray-50/80 hover:bg-white rounded-2xl border border-gray-200/90 hover:border-amber-300 transition space-y-2.5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div>
-          <span className="font-black text-xs text-gray-900 block">{title}</span>
-          {description && <span className="text-[10px] text-gray-500 leading-tight block">{description}</span>}
+    <div className="p-2.5 sm:p-3 bg-gray-50/80 hover:bg-white rounded-2xl border border-gray-200/90 hover:border-amber-300 transition space-y-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+        <div className="min-w-0">
+          <span className="font-bold text-xs text-gray-900 block truncate">{title}</span>
+          {description && <span className="text-[10px] text-gray-500 leading-tight block truncate">{description}</span>}
         </div>
 
         {/* Segmented Mode Switcher */}
-        <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-gray-200 shadow-2xs self-start sm:self-auto shrink-0">
+        <div className="flex items-center gap-0.5 bg-white p-0.5 rounded-lg border border-gray-200 shadow-2xs self-start sm:self-auto shrink-0">
           <button
             type="button"
             onClick={() => onModeChange('ratio')}
-            className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition ${mode === 'ratio'
-                ? 'bg-amber-600 text-white shadow-xs'
-                : 'text-gray-600 hover:text-gray-900'
+            className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold transition ${mode === 'ratio'
+              ? 'bg-amber-600 text-white shadow-xs'
+              : 'text-gray-600 hover:text-gray-900'
               }`}
           >
-            {isRtl ? '📊 نسبة وتناسب' : 'Ratio'}
+            {isRtl ? '📊 نسبة' : 'Ratio'}
           </button>
           <button
             type="button"
             onClick={() => onModeChange('fixed')}
-            className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition ${mode === 'fixed'
-                ? 'bg-amber-600 text-white shadow-xs'
-                : 'text-gray-600 hover:text-gray-900'
+            className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold transition ${mode === 'fixed'
+              ? 'bg-amber-600 text-white shadow-xs'
+              : 'text-gray-600 hover:text-gray-900'
               }`}
           >
-            {isRtl ? '🔒 كمية ثابتة' : 'Fixed'}
+            {isRtl ? '🔒 مقطوع' : 'Fixed'}
           </button>
         </div>
       </div>
 
       {/* Input Field according to active mode */}
-      <div className="pt-0.5">
+      <div>
         {mode === 'ratio' ? (
           <div className="flex items-center gap-2">
             <input
@@ -2059,9 +2066,9 @@ function RateItemCard({
               min="0.001"
               value={ratioValue ?? ''}
               onChange={(e) => onRatioChange(e.target.value)}
-              className="w-full bg-white border border-gray-200 rounded-xl p-2 font-black text-gray-900 text-xs shadow-2xs focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+              className="w-full h-8 bg-white border border-gray-200 rounded-xl px-2.5 py-1 font-bold text-gray-900 text-xs shadow-2xs focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
             />
-            <span className="text-gray-500 font-bold text-[11px] shrink-0">{ratioUnitLabel}</span>
+            <span className="text-gray-500 font-bold text-[10px] shrink-0">{ratioUnitLabel}</span>
           </div>
         ) : (
           <div className="flex items-center gap-2">
@@ -2071,9 +2078,9 @@ function RateItemCard({
               min="0.1"
               value={fixedValue ?? ''}
               onChange={(e) => onFixedChange(e.target.value)}
-              className="w-full bg-white border border-amber-300 rounded-xl p-2 font-black text-amber-900 text-xs shadow-2xs focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+              className="w-full h-8 bg-white border border-amber-300 rounded-xl px-2.5 py-1 font-bold text-amber-900 text-xs shadow-2xs focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
             />
-            <span className="text-amber-800 font-bold text-[11px] shrink-0">{fixedUnitLabel}</span>
+            <span className="text-amber-800 font-bold text-[10px] shrink-0">{fixedUnitLabel}</span>
           </div>
         )}
       </div>
@@ -2111,20 +2118,20 @@ function EditRatesModal({ isOpen, onClose, currentRates, onSave, onReset, isRtl 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white rounded-3xl max-w-2xl w-full p-5 sm:p-7 shadow-2xl border border-amber-100 space-y-5 my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm overflow-hidden">
+      <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-amber-100 flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden">
 
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+        {/* Pinned Sticky Header */}
+        <div className="shrink-0 p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between bg-white z-10">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-orange-100 text-orange-700 flex items-center justify-center font-bold">
+            <div className="w-10 h-10 rounded-2xl bg-orange-100 text-orange-700 flex items-center justify-center font-bold shrink-0">
               <Sliders size={20} />
             </div>
             <div>
-              <h3 className="text-base sm:text-lg font-black text-gray-900">
+              <h3 className="text-sm sm:text-base font-black text-gray-900">
                 {isRtl ? 'تعديل معدلات الاستهلاك والتموين' : 'Edit Consumption & Logistics Rates'}
               </h3>
-              <p className="text-xs text-gray-500">
+              <p className="text-[11px] text-gray-500 line-clamp-1">
                 {isRtl ? 'تخصيص الحصص إما بنسبة وتناسب مع الحضور أو كميات مقطوعة ثابتة' : 'Tune items by guest ratio or fixed amounts'}
               </p>
             </div>
@@ -2132,56 +2139,57 @@ function EditRatesModal({ isOpen, onClose, currentRates, onSave, onReset, isRtl 
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition"
+            className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition shrink-0"
           >
             <X size={18} />
           </button>
         </div>
 
-        {/* Categories Tabs (4 Complete Tabs) */}
-        <div className="flex gap-2 border-b border-gray-100 pb-2 text-xs font-bold overflow-x-auto scrollbar-none">
+        {/* Pinned Category Tabs */}
+        <div className="shrink-0 px-3 sm:px-5 py-2.5 bg-gray-50/70 border-b border-gray-100 flex gap-1.5 overflow-x-auto scrollbar-none z-10">
           <button
             type="button"
             onClick={() => setActiveTab('food')}
-            className={`px-3.5 py-2 rounded-xl transition flex items-center gap-2 whitespace-nowrap ${activeTab === 'food' ? 'bg-orange-100 text-orange-900 font-black' : 'text-gray-500 hover:bg-gray-50'
+            className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-xs whitespace-nowrap ${activeTab === 'food' ? 'bg-orange-100 text-orange-900 font-black shadow-2xs' : 'text-gray-600 hover:bg-gray-100'
               }`}
           >
-            <Utensils size={15} />
+            <Utensils size={14} />
             <span>{isRtl ? 'الوليمة واللحوم والأرز' : 'Feast & Livestock'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('tea')}
-            className={`px-3.5 py-2 rounded-xl transition flex items-center gap-2 whitespace-nowrap ${activeTab === 'tea' ? 'bg-amber-100 text-amber-900 font-black' : 'text-gray-500 hover:bg-gray-50'
+            className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-xs whitespace-nowrap ${activeTab === 'tea' ? 'bg-amber-100 text-amber-900 font-black shadow-2xs' : 'text-gray-600 hover:bg-gray-100'
               }`}
           >
-            <Coffee size={15} />
+            <Coffee size={14} />
             <span>{isRtl ? 'عدة الشاي والسموار' : 'Tea Kit & Samovars'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('water')}
-            className={`px-3.5 py-2 rounded-xl transition flex items-center gap-2 whitespace-nowrap ${activeTab === 'water' ? 'bg-blue-100 text-blue-900 font-black' : 'text-gray-500 hover:bg-gray-50'
+            className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-xs whitespace-nowrap ${activeTab === 'water' ? 'bg-blue-100 text-blue-900 font-black shadow-2xs' : 'text-gray-600 hover:bg-gray-100'
               }`}
           >
-            <Droplets size={15} />
+            <Droplets size={14} />
             <span>{isRtl ? 'سقيا الماء البارد' : 'Cold Water'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('venue')}
-            className={`px-3.5 py-2 rounded-xl transition flex items-center gap-2 whitespace-nowrap ${activeTab === 'venue' ? 'bg-amber-100 text-amber-950 font-black border border-amber-300/60' : 'text-gray-500 hover:bg-gray-50'
+            className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-xs whitespace-nowrap ${activeTab === 'venue' ? 'bg-amber-100 text-amber-950 font-black shadow-2xs border border-amber-300/60' : 'text-gray-600 hover:bg-gray-100'
               }`}
           >
-            <Tent size={15} />
+            <Tent size={14} />
             <span>{isRtl ? 'المخادر والخيام والفرش' : 'Venue & Carpets'}</span>
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Scrollable Form Body */}
+        <form onSubmit={handleSubmit} id="edit-rates-form" className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-3.5 custom-scrollbar min-h-0">
 
           {/* TAB 1: FEAST & LIVESTOCK (الوليمة واللحوم والأرز) */}
           {activeTab === 'food' && (
@@ -2513,36 +2521,38 @@ function EditRatesModal({ isOpen, onClose, currentRates, onSave, onReset, isRtl 
             </div>
           )}
 
-          {/* Modal Footer Buttons */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-gray-100">
+        </form>
+
+        {/* Pinned Sticky Footer */}
+        <div className="shrink-0 p-3 sm:p-4 border-t border-gray-100 bg-white flex items-center justify-between gap-2.5 z-10">
+          <button
+            type="button"
+            onClick={onReset}
+            className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl border border-gray-200 hover:bg-gray-100 text-gray-700 font-bold text-xs transition"
+          >
+            <RotateCcw size={14} />
+            <span className="hidden sm:inline">{isRtl ? 'استعادة الافتراضي' : 'Reset Defaults'}</span>
+            <span className="sm:hidden">{isRtl ? 'الافتراضي' : 'Reset'}</span>
+          </button>
+
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onReset}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-100 text-gray-700 font-bold text-xs transition"
+              onClick={onClose}
+              className="px-3.5 sm:px-4 py-2 rounded-xl border border-gray-200 font-bold text-xs text-gray-600 hover:bg-gray-50 transition"
             >
-              <RotateCcw size={14} />
-              <span>{isRtl ? 'استعادة الافتراضي' : 'Reset Defaults'}</span>
+              {isRtl ? 'إلغاء' : 'Cancel'}
             </button>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2.5 rounded-xl border border-gray-200 font-bold text-xs text-gray-600 hover:bg-gray-50 transition"
-              >
-                {isRtl ? 'إلغاء' : 'Cancel'}
-              </button>
-
-              <button
-                type="submit"
-                className="px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-xs shadow-md transition"
-              >
-                {isRtl ? 'حفظ وتطبيق المعدلات ✓' : 'Save & Apply ✓'}
-              </button>
-            </div>
+            <button
+              type="submit"
+              form="edit-rates-form"
+              className="px-4 sm:px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-xs shadow-md transition"
+            >
+              {isRtl ? 'حفظ وتطبيق المعدلات ✓' : 'Save & Apply ✓'}
+            </button>
           </div>
-
-        </form>
+        </div>
 
       </div>
     </div>

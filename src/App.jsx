@@ -9,7 +9,7 @@ import {
   Globe, Plus, Trash2, CheckCircle, Clock, MapPin,
   Menu, X, Sparkles, Loader2, Copy, HeartHandshake, Image as ImageIcon, FileText,
   MessageCircle, Send, Upload, FileSpreadsheet,
-  Phone, ExternalLink, Camera, Music, Flower2, UtensilsCrossed, Search,
+  Phone, ExternalLink, Camera, Music, Flower2, UtensilsCrossed, Utensils, Coins, Calendar, Users2, Search,
   Building2, Eye, BookmarkCheck, BookmarkPlus, Check, Star, AlertCircle
 } from 'lucide-react';
 import { SERVICE_CATEGORIES, SERVICE_TEMPLATES, createWhatsAppInquiryLink } from './data/servicesData';
@@ -432,6 +432,7 @@ export default function App() {
   const [showMassSetupModal, setShowMassSetupModal] = useState(false);
   const [isSetupComplete, setIsSetupComplete] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [massActiveTab, setMassActiveTab] = useState('overview');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const [couple, setCouple] = useState({ groom: "", bride: "", date: "", initialBudget: "", });
@@ -758,6 +759,16 @@ export default function App() {
     { id: 'guests', icon: <Users size={20} />, label: t.guests },
     { id: 'team', icon: <HeartHandshake size={20} />, label: t.team },
     { id: 'budget', icon: <Wallet size={20} />, label: t.budget },
+  ];
+
+  const massNavItems = [
+    { id: 'overview', icon: <Sparkles size={20} />, label: isRtl ? 'نظرة عامة' : 'Overview' },
+    { id: 'couples', icon: <Users2 size={20} />, label: isRtl ? `سجل العرسان (${massWeddingData.couples?.length || 0})` : `Couples (${massWeddingData.couples?.length || 0})` },
+    { id: 'committees', icon: <HeartHandshake size={20} />, label: isRtl ? `اللجان الميدانية (${massWeddingData.committees?.length || 0})` : `Committees (${massWeddingData.committees?.length || 0})` },
+    { id: 'logistics', icon: <Utensils size={20} />, label: isRtl ? 'حاسبة الوليمة والتموين' : 'Rations & Logistics' },
+    { id: 'budget', icon: <Coins size={20} />, label: isRtl ? 'الميزانية والرعايات' : 'Budget & Sponsors' },
+    { id: 'schedule', icon: <Calendar size={20} />, label: isRtl ? 'جدول الفعاليات' : 'Schedule' },
+    { id: 'ai', icon: <Sparkles size={20} />, label: isRtl ? '✨ المساعد الذكي' : '✨ AI Assistant' },
   ];
 
 
@@ -1655,88 +1666,55 @@ export default function App() {
     );
   };
 
-  // 1. إذا كان التطبيق لسه يتأكد من حالة المستخدم، نعرض شاشة تحميل بسيطة
+  // Auth loading check
   if (isAuthLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#fdfbf7]">
-        <div className="text-amber-600 font-bold text-2xl animate-pulse">جاري التحميل... ⏳</div>
-      </div>
-    );
-  }
-
-  // 2. إذا لم يكن هناك مستخدم مسجل، نعرض صفحة تسجيل الدخول
-  if (!user) {
-    return <Auth onLoginSuccess={() => console.log('تم تسجيل الدخول بنجاح')}
-      toggleLang={toggleLang}
-      isRtl={isRtl} />;
-  }
-
-  // 3. EARLY RETURNS (للزواج الفردي فقط في حال عدم اكتمال الإعداد)
-  if (weddingMode === 'individual' && !isSetupComplete) {
-    return (
-      <div dir={isRtl ? 'rtl' : 'ltr'} className={`min-h-screen bg-amber-50 flex items-center justify-center p-4 font-sans ${isRtl ? 'font-arabic' : ''}`}>
-        <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full border border-amber-100">
-          <div className="text-center mb-8">
-            <CalendarHeart size={48} className="text-amber-500 mx-auto mb-4" />
-            <h1 className="text-3xl font-extrabold text-amber-900 mb-2">{t.appName}</h1>
-            <p className="text-gray-500 font-medium">{t.welcomeSetup}</p>
-          </div>
-
-          <form onSubmit={handleSetupSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">{t.groomName}</label>
-              <input type="text" name="groom" required className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-gray-50" placeholder="عمر" />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">{t.brideName}</label>
-              <input type="text" name="bride" required className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-gray-50" placeholder="فاطمة" />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">{t.weddingDate}</label>
-              <input type="date" name="date" min={todayStr} required className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-gray-50" />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">{t.initialBudget} ({t.currency})</label>
-              <input type="number" name="budget" required min="0" className="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-gray-50" placeholder="2500000" />
-            </div>
-            <button type="submit" className="w-full bg-amber-600 text-white font-bold text-lg py-3 rounded-xl hover:bg-amber-700 transition shadow-lg mt-4">
-              {t.startPlanning}
-            </button>
-          </form>
-          <div className="mt-6 flex flex-col items-center gap-2 text-center">
-            <button
-              type="button"
-              onClick={() => setWeddingMode(null)}
-              className="text-xs text-amber-700 hover:text-amber-900 font-bold hover:underline"
-            >
-              {isRtl ? '← تغيير نوع الزفاف (فردي / جماعي)' : '← Change Wedding Mode (Individual / Mass)'}
-            </button>
-            <button onClick={toggleLang} className="text-sm text-gray-500 hover:text-amber-600 underline decoration-dotted">
-              {lang === 'ar' ? 'Switch to English' : 'التبديل للعربية'}
-            </button>
-          </div>
+      <div className="min-h-screen bg-[#fdfbf7] flex items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-gray-600 font-bold">{isRtl ? 'جاري التحميل...' : 'Loading...'}</p>
         </div>
       </div>
     );
   }
 
-  // 6. MAIN RENDER
-  return (
-    <div dir={isRtl ? 'rtl' : 'ltr'} className={`min-h-screen bg-[#fdfbf7] font-sans ${isRtl ? 'font-arabic' : ''}`}>
+  // Auth check
+  if (!user) {
+    return (
+      <Auth
+        onLoginSuccess={handleAuthSuccess}
+        isRtl={isRtl}
+        lang={lang}
+        onToggleLang={toggleLang}
+      />
+    );
+  }
 
-      {/* Navigation */}
-      {/* Navigation */}
+  // Setup check (فقط إذا كان وضع فردي)
+  if (weddingMode === 'individual' && !isSetupComplete) {
+    return (
+      <SetupWizard
+        weddingData={weddingData}
+        onComplete={handleSetupComplete}
+        isRtl={isRtl}
+        lang={lang}
+      />
+    );
+  }
+
+  return (
+    <div dir={isRtl ? 'rtl' : 'ltr'} className="min-h-screen bg-[#fdfbf7] text-gray-800 font-sans antialiased">
       <nav className="relative bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between h-16 items-center">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 flex justify-between h-14 sm:h-16 items-center gap-1 sm:gap-4">
 
           {/* Left: Profile Menu Button (الزر الوحيد الآن لفتح القائمة) */}
-          <div className="relative profile-menu-container">
+          <div className="relative profile-menu-container shrink-0">
             <button
               type="button"
               onClick={() => setIsProfileMenuOpen((open) => !open)}
-              className="flex items-center gap-3 rounded-full border border-gray-200 bg-white px-2 py-1 hover:shadow-sm transition"
+              className="flex items-center gap-2 sm:gap-3 rounded-full border border-gray-200 bg-white p-1 sm:px-2 sm:py-1 hover:shadow-sm transition"
             >
-              <div className="h-10 w-10 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center justify-center">
+              <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center justify-center text-xs sm:text-base">
                 {profileInfo.username ? profileInfo.username[0].toUpperCase() : 'U'}
               </div>
               <div className="hidden sm:flex flex-col text-left">
@@ -1749,35 +1727,43 @@ export default function App() {
           {/* Center: App Logo & Name */}
           <button
             type="button"
-            onClick={() => { setActiveTab('dashboard'); setIsProfileMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            onClick={() => {
+              if (weddingMode === 'mass') {
+                setMassActiveTab('overview');
+              } else {
+                setActiveTab('dashboard');
+              }
+              setIsProfileMenuOpen(false);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
             aria-label={isRtl ? 'العودة إلى الصفحة الرئيسية' : 'Go to homepage'}
-            className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-2 text-amber-700 font-extrabold text-2xl rounded-full px-2 py-1 hover:bg-amber-50 transition focus:outline-none focus:ring-2 focus:ring-amber-300"
+            className="sm:absolute sm:left-1/2 sm:transform sm:-translate-x-1/2 flex items-center gap-1.5 sm:gap-2 text-amber-700 font-extrabold text-lg sm:text-2xl rounded-full px-2 py-1 hover:bg-amber-50 transition focus:outline-none focus:ring-2 focus:ring-amber-300 shrink-0"
           >
-            <CalendarHeart size={24} className="text-amber-500" />
-            <span>{t.appName}</span>
+            <CalendarHeart size={20} className="text-amber-500 sm:w-6 sm:h-6" />
+            <span className="truncate">{t.appName}</span>
           </button>
 
           {/* Right: Mode Switcher & Language Switch Button */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             {weddingMode ? (
               <button
                 type="button"
                 onClick={() => setShowModeSelectorModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black transition border shadow-sm bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 text-amber-900 hover:border-amber-400 hover:shadow"
+                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-black transition border shadow-2xs bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 text-amber-900 hover:border-amber-400"
                 title={isRtl ? 'تبديل وضع التخطيط (فردي / جماعي)' : 'Switch Planning Mode'}
               >
                 {weddingMode === 'mass' ? (
                   <>
-                    <Users size={14} className="text-amber-700" />
-                    <span className="hidden sm:inline">{isRtl ? 'عرس جماعي' : 'Mass Wedding'}</span>
+                    <Users size={13} className="text-amber-700" />
+                    <span className="hidden md:inline">{isRtl ? 'عرس جماعي' : 'Mass Wedding'}</span>
                   </>
                 ) : (
                   <>
-                    <CalendarHeart size={14} className="text-rose-600" />
-                    <span className="hidden sm:inline">{isRtl ? 'زواج فردي' : 'Individual'}</span>
+                    <CalendarHeart size={13} className="text-rose-600" />
+                    <span className="hidden md:inline">{isRtl ? 'زواج فردي' : 'Individual'}</span>
                   </>
                 )}
-                <span className="text-[10px] text-amber-800 font-bold underline decoration-dotted bg-amber-100/70 px-1.5 py-0.5 rounded-md">
+                <span className="text-[10px] text-amber-800 font-bold bg-amber-100/70 px-1.5 py-0.5 rounded-md">
                   {isRtl ? 'تبديل' : 'Switch'}
                 </span>
               </button>
@@ -1790,11 +1776,11 @@ export default function App() {
 
             <button
               onClick={toggleLang}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:text-amber-600 hover:bg-amber-50 transition border border-gray-200 bg-white"
+              className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-gray-600 hover:text-amber-600 hover:bg-amber-50 transition border border-gray-200 bg-white text-xs sm:text-sm font-medium"
               title={lang === 'ar' ? 'Switch to English' : 'التبديل للعربية'}
             >
-              <Globe size={18} />
-              <span className="hidden sm:inline text-sm font-medium">
+              <Globe size={15} />
+              <span className="text-xs">
                 {lang === 'ar' ? 'EN' : 'عر'}
               </span>
             </button>
@@ -1814,7 +1800,7 @@ export default function App() {
             <div
               className={`relative w-[85%] max-w-sm bg-white h-full shadow-2xl flex flex-col ${isRtl ? 'left-0 ml-auto' : 'right-0 mr-auto'}`}
               onClick={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()} // هذا السطر اللي بيوقف اختفاء القائمة في الجوال 
+              onTouchStart={(e) => e.stopPropagation()}
             >
               {/* زر إغلاق القائمة (X) */}
               <button
@@ -1893,20 +1879,38 @@ export default function App() {
                 {/* القسم الثاني: تبويبات التنقل (تظهر فقط في الجوال لأن الديسكتوب فيه الشريط الجانبي) */}
                 <div className="p-4 md:hidden">
                   <h4 className="text-xs font-bold text-gray-400 mb-3 px-2 uppercase tracking-wider">
-                    {isRtl ? 'القائمة الرئيسية' : 'Main Menu'}
+                    {weddingMode === 'mass'
+                      ? (isRtl ? 'أقسام العرس الجماعي' : 'Mass Wedding Sections')
+                      : (isRtl ? 'القائمة الرئيسية' : 'Main Menu')}
                   </h4>
                   <ul className="space-y-1">
-                    {navItems.map((item) => (
-                      <li key={item.id}>
-                        <button
-                          onClick={() => { setActiveTab(item.id); setIsProfileMenuOpen(false); }}
-                          className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${activeTab === item.id ? 'bg-amber-50 text-amber-700 font-bold' : 'text-gray-600 font-medium hover:bg-gray-50'}`}
-                        >
-                          <div className={activeTab === item.id ? 'text-amber-600' : 'text-gray-400'}>{item.icon}</div>
-                          <span>{item.label}</span>
-                        </button>
-                      </li>
-                    ))}
+                    {(weddingMode === 'mass' ? massNavItems : navItems).map((item) => {
+                      const isActive = weddingMode === 'mass'
+                        ? massActiveTab === item.id
+                        : activeTab === item.id;
+                      return (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (weddingMode === 'mass') {
+                                setMassActiveTab(item.id);
+                              } else {
+                                setActiveTab(item.id);
+                              }
+                              setIsProfileMenuOpen(false);
+                            }}
+                            className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${isActive
+                              ? 'bg-amber-50 text-amber-700 font-bold border border-amber-200/50'
+                              : 'text-gray-600 font-medium hover:bg-gray-50'
+                              }`}
+                          >
+                            <div className={isActive ? 'text-amber-600' : 'text-gray-400'}>{item.icon}</div>
+                            <span>{item.label}</span>
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               </div>
@@ -1921,7 +1925,6 @@ export default function App() {
                   {isRtl ? 'تسجيل الخروج' : 'Logout'}
                 </button>
               </div>
-
             </div>
           </div>
         )}
@@ -1937,17 +1940,53 @@ export default function App() {
             />
           </main>
         ) : weddingMode === 'mass' ? (
-          <main className="w-full pb-12">
-            <MassWeddingDashboard
-              data={massWeddingData}
-              onUpdateData={handleUpdateMassWeddingData}
-              onOpenSettings={() => setShowMassSetupModal(true)}
-              onSwitchMode={() => setShowModeSelectorModal(true)}
-              isRtl={isRtl}
-              lang={lang}
-              generateWithGemini={generateWithGemini}
-            />
-          </main>
+          <div className="flex gap-6 lg:gap-8">
+            {/* Mass Wedding Desktop Sidebar */}
+            <aside className="hidden md:block w-64 shrink-0">
+              <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-4 sm:p-5 sticky top-24">
+                <div className="text-[11px] font-black text-amber-900/60 uppercase px-3 mb-2 tracking-wider">
+                  {isRtl ? 'أقسام العرس الجماعي' : 'Mass Wedding'}
+                </div>
+                <ul className="space-y-1.5">
+                  {massNavItems.map((item) => (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMassActiveTab(item.id);
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all text-xs font-bold ${massActiveTab === item.id
+                          ? 'bg-gradient-to-r from-amber-50 to-orange-50 text-amber-800 font-black shadow-2xs border border-amber-200/60'
+                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                          }`}
+                      >
+                        <div className={massActiveTab === item.id ? 'text-amber-600' : 'text-gray-400'}>
+                          {item.icon}
+                        </div>
+                        <span>{item.label}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </aside>
+
+            {/* Mass Wedding Main Content */}
+            <main className="flex-1 min-w-0 pb-16">
+              <MassWeddingDashboard
+                data={massWeddingData}
+                onUpdateData={handleUpdateMassWeddingData}
+                onOpenSettings={() => setShowMassSetupModal(true)}
+                onSwitchMode={() => setShowModeSelectorModal(true)}
+                isRtl={isRtl}
+                lang={lang}
+                generateWithGemini={generateWithGemini}
+                activeTab={massActiveTab}
+                onTabChange={setMassActiveTab}
+              />
+            </main>
+          </div>
         ) : (
           <div className="flex gap-8">
             {/* Sidebar */}
