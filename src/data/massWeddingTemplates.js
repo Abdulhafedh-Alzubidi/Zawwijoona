@@ -123,16 +123,16 @@ export const DEFAULT_MASS_WEDDING_DATA = {
     },
     {
       id: "com-3",
-      name: "لجنة الشاهي الحضرمي وفريق الشاهوجية",
-      nameEn: "Hadhrami Tea & Hospitality Team",
-      leader: "الأستاذ رشيد بن سنكر (كبير الشاهوجية)",
+      name: "لجنة الشاهي الحضرمي وفريق عدة الشاي",
+      nameEn: "Hadhrami Tea & Tea Kit Team",
+      leader: "الأستاذ رشيد بن سنكر (مسؤول عدة الشاي والسموار)",
       phone: "+967 770 555 666",
       volunteersCount: 28,
       responsibilities: [
-        "تجهيز عدة الشاهي الحضرمي (الكوافير، مواقد الجمر، أواني التخدير)",
-        "إعداد الشاهي الأحمر المخدر بالنعناع والشاهي العدني بالحليب طوال اليوم",
-        "توزيع دلال وبرادات الشاهي واستكانات الشرب في أرجاء الساحة",
-        "متابعة إمدادات السكر والنعناع والفحم الطبيعي"
+        "تجهيز عدة الشاهي الحضرمي (السموارات، مواقد الجمر، دلال الصب، صواني التوزيع)",
+        "إعداد الشاهي الأحمر الحضرمي المخدر والشاهي العدني بالحليب طوال اليوم",
+        "توزيع دلال وبرادات الشاهي وصواني الفناجين في أرجاء الساحة والمخادر",
+        "متابعة إمدادات السكر والشاي السيلاني والفناجين والفحم الطبيعي للسموارات"
       ],
       status: "ready"
     },
@@ -308,8 +308,8 @@ export const DEFAULT_MASS_WEDDING_DATA = {
     },
     {
       id: "exp-5",
-      item: "ضيافة الشاهي الحضرمي وفريق الشاهوجية والمستلزمات",
-      itemEn: "Hadhrami Tea Hospitality & Tea Team Supplies",
+      item: "ضيافة الشاهي الحضرمي وفريق عدة الشاي ومستلزمات السموار",
+      itemEn: "Hadhrami Tea Hospitality, Tea Kit Team & Samovar Supplies",
       amount: 650000,
       category: "tea",
       status: "approved"
@@ -391,69 +391,282 @@ export const DEFAULT_MASS_WEDDING_DATA = {
   ]
 };
 
-// --- حاسبة التموين والوليمة الكبرى واللوجستيات ---
-// دالة حساب المؤن بدقة بناء على عدد العرسان أو إجمالي عدد الضيوف
-export function calculateMassWeddingLogistics(couplesCount, guestsOverride = null) {
-  // متوسط الحضور الإجمالي = عدد العرسان × 35 إلى 40 ضيفاً لكل عريس + 200 ضيف شرف وشخصيات عامة ولجان
-  const totalGuests = guestsOverride || (couplesCount * 38 + 250);
+// --- الإعدادات والمعدلات الافتراضية للحاسبة الذكية (قابلة للتعديل من المنظمين) ---
+export const DEFAULT_CALCULATOR_RATES = {
+  // الحضور
+  guestsPerCouple: 38, // متوسط عدد المعازيم لكل عريس
+  vipGuests: 250, // ضيوف الشرف واللجان والوجهاء
 
-  // 1. حساب الذبائح (خروف/تيس لكل 15-18 شخص، أو رأس عجل لكل 70-80 شخص)
-  const sheepCount = Math.ceil(totalGuests / 16);
-  const meatKilosApprox = sheepCount * 13; // بالمتوسط 13 كجم لحم صافي
+  // 1. الوليمة واللحوم
+  sheepMode: 'ratio', // 'ratio' | 'fixed'
+  guestsPerSheep: 16, // عدد الأشخاص لكل رأس غنم / ذبيحة
+  fixedSheepCount: 24, // كمية مقطوعة ثابتة
 
-  // 2. حساب الأرز (كيس أرز بسمتي 40 كجم يكفي لـ 140-160 شخص بالولائم)
-  const riceBags40kg = Math.ceil(totalGuests / 150);
+  meatMode: 'ratio',
+  meatKilosPerSheep: 13, // صافي اللحم المقدر لكل ذبيحة (كجم)
+  fixedMeatKilos: 312,
 
-  // 3. ضيافة الشاهي الحضرمي وفريق الشاهوجية
-  // كل 100 ضيف يحتاجون تقريباً 1 براد تخدير كبير + 2 استكانات شرب لكل شخص طوال اليوم
-  const teaBrewingPotsCount = Math.max(3, Math.ceil(totalGuests / 250)); // قدور التخدير الكبرى
-  const teaServingKettlesCount = Math.max(8, Math.ceil(totalGuests / 60)); // برادات ودلال الصب المتنقلة
-  const teaTeamMembersCount = Math.max(6, Math.ceil(totalGuests / 70)); // فريق الشاهوجية وصانعي الشاي
-  const teaSugarBags50kg = Math.max(2, Math.ceil(totalGuests / 400)); // أكياس السكر 50 كجم
-  const teaBoxesKilograms = Math.ceil(totalGuests * 0.025); // كجم شاي سيلاني فاخر
-  const mintBunches = Math.ceil(totalGuests / 10); // حزم النعناع الحضرمي الطازج
+  riceMode: 'ratio',
+  guestsPerRiceBag40kg: 150, // عدد الأشخاص لكل كيس أرز بسمتي 40 كجم
+  fixedRiceBags: 6,
 
-  // 4. برادات وترامس المياه الباردة
-  // ترمس/براد كبير سعة 60-80 لتر لكل 70-80 شخص موزع في الزوايا
-  const largeWaterDispensersCount = Math.max(6, Math.ceil(totalGuests / 75));
-  // قوالب الثلج (قالب ثلج كامل لكل ترمس لتبريده طوال ساعات الحفل)
-  const iceBlocksCount = largeWaterDispensersCount * 3; // 3 تبديلات ثلج على مدار اليوم
-  // كراتين مياه شرب معبأة مبردة (للمنصة وكبار الشخصيات وكبار السن)
-  const bottledWaterCartons = Math.ceil(totalGuests / 25);
+  oilMode: 'ratio',
+  cookingOilPerRiceBag: 1.5, // كراتين الزيت والسمن لكل كيس أرز
+  fixedOilCartons: 9,
 
-  // 5. المخادر والفرش
-  // سجاد تقليدي مساحته تكفي الضيوف (سجادة 4×3 م تكفي 10-12 جالس)
-  const carpetsCount = Math.ceil(totalGuests / 11);
-  const tentsAreaSqMeters = Math.ceil(totalGuests * 1.4); // 1.4 م² لكل ضيف مع ممرات الخدمة
+  spicesMode: 'ratio',
+  spicesPerSheepKg: 1.2, // كجم بهارات مشكلة لكل ذبيحة
+  fixedSpicesKg: 28,
+
+  // 2. ضيافة الشاهي وفريق عدة الشاي والسموار
+  teaTeamMode: 'ratio',
+  guestsPerTeaMember: 70, // عدد الضيوف لكل فرد في فريق عدة الشاي (صبابين ومعدين)
+  fixedTeaTeamSize: 16,
+
+  samovarsMode: 'ratio',
+  guestsPerSamovar: 250, // عدد الضيوف لكل سموار تخدير كبير
+  fixedSamovarsCount: 4,
+
+  servingKettlesMode: 'ratio',
+  guestsPerServingKettle: 60, // عدد الضيوف لكل دلة / براد صب متنقل
+  fixedServingKettles: 14,
+
+  sugarMode: 'ratio',
+  guestsPerSugarBag50kg: 400, // عدد الضيوف لكل كيس سكر 50 كجم
+  fixedSugarBags: 3,
+
+  teaLeavesMode: 'ratio',
+  teaKgPerGuest: 0.025, // كجم شاي سيلاني فاخر لكل ضيف
+  fixedTeaLeavesKg: 25,
+
+  teaCupsMode: 'ratio',
+  teaCupsMultiplier: 1.5, // فناجين واستكانات الشاي لكل ضيف
+  fixedTeaCups: 1200,
+
+  teaTraysMode: 'ratio',
+  guestsPerTeaTray: 50, // عدد الضيوف لكل صينية توزيع الشاي
+  fixedTeaTrays: 18,
+
+  charcoalMode: 'ratio',
+  charcoalBagsPerSamovar: 2.5, // أكياس الفحم الطبيعي لكل سموار
+  fixedCharcoalBags: 10,
+
+  // 3. سقيا الماء البارد
+  waterDispensersMode: 'ratio',
+  guestsPerWaterDispenser: 75, // عدد الضيوف لكل براد / ترمس ماء كبير سعة 60-80 لتر
+  fixedWaterDispensers: 12,
+
+  iceBlocksMode: 'ratio',
+  iceBlocksPerDispenser: 3, // عدد قوالب الثلج المقررة لكل براد طوال اليوم
+  fixedIceBlocks: 36,
+
+  bottledWaterMode: 'ratio',
+  guestsPerBottledCarton: 25, // عدد الضيوف لكل كرتون مياه شرب معبأة مبردة
+  fixedBottledWaterCartons: 40,
+
+  cupsMode: 'ratio',
+  cupsPerGuestMultiplier: 2.0, // عدد أكواب الشرب لكل ضيف
+  fixedCups: 2000,
+
+  // 4. المخادر والخيام والفرش
+  carpetsMode: 'ratio',
+  guestsPerCarpet: 11, // عدد الضيوف لكل سجادة تقليدية (4×3 م)
+  fixedCarpets: 80,
+
+  tentsMode: 'ratio',
+  tentsSqMetersPerGuest: 1.4, // مساحة المظلات والخيام بالمتر المربع لكل ضيف
+  fixedTentsArea: 1200,
+
+  fansMode: 'ratio',
+  guestsPerCoolerFan: 50, // عدد الضيوف لكل مروحة رذاذ وتبريد
+  fixedFans: 16
+};
+
+// مواد ومؤن افتراضية إضافية يمكن للمنظمين تعديلها والإضافة عليها
+export const DEFAULT_CUSTOM_LOGISTICS_ITEMS = [
+  {
+    id: "item-yogurt",
+    name: "كراتين زبادي وحقين مبرد",
+    nameEn: "Yogurt & Laban Cartons",
+    category: "food",
+    unit: "كرتون",
+    unitEn: "carton",
+    rateType: "ratio", // 'ratio' (1 per N guests) or 'fixed'
+    ratio: 50, // 1 كرتون لكل 50 ضيف
+    fixedAmount: 25,
+    note: "يقدم مع وجبة الغداء بالوليمة"
+  },
+  {
+    id: "item-incense",
+    name: "مباخر وبخور وعود فاخر",
+    nameEn: "Incense & Oud Burners",
+    category: "teaHospitality",
+    unit: "طقم مبخرة",
+    unitEn: "incense set",
+    rateType: "ratio",
+    ratio: 120, // مبخرة لكل 120 ضيف
+    fixedAmount: 10,
+    note: "لتطييب مجالس الضيوف والمخادر"
+  },
+  {
+    id: "item-trays",
+    name: "صواني تقديم ومناشف ضيافة",
+    nameEn: "Serving Trays & Towels",
+    category: "teaHospitality",
+    unit: "صينية",
+    unitEn: "tray",
+    rateType: "ratio",
+    ratio: 80,
+    fixedAmount: 15,
+    note: "لتوزيع كاسات الشاي والتمر"
+  }
+];
+
+// --- حاسبة التموين والوليمة الكبرى واللوجستيات (ديناميكية بالكامل تدعم الكميات الثابتة والنسب) ---
+export function calculateMassWeddingLogistics(
+  couplesCount,
+  guestsOverride = null,
+  customRates = null,
+  customItems = []
+) {
+  // دمج المعدلات المخصصة مع الافتراضية
+  const rates = { ...DEFAULT_CALCULATOR_RATES, ...(customRates || {}) };
+
+  // إجمالي عدد الحضور المقدر
+  const totalGuests = Number(guestsOverride) || (Number(couplesCount) * rates.guestsPerCouple + rates.vipGuests);
+
+  // 1. حساب الذبائح واللحوم والأرز
+  const sheepCount = rates.sheepMode === 'fixed'
+    ? Number(rates.fixedSheepCount) || 1
+    : Math.ceil(totalGuests / rates.guestsPerSheep);
+
+  const meatKilosApprox = rates.meatMode === 'fixed'
+    ? Number(rates.fixedMeatKilos) || 0
+    : sheepCount * rates.meatKilosPerSheep;
+
+  const riceBags40kg = rates.riceMode === 'fixed'
+    ? Number(rates.fixedRiceBags) || 1
+    : Math.ceil(totalGuests / rates.guestsPerRiceBag40kg);
+
+  const cookingOilCartons = rates.oilMode === 'fixed'
+    ? Number(rates.fixedOilCartons) || 1
+    : Math.ceil(riceBags40kg * rates.cookingOilPerRiceBag);
+
+  const spicesKilos = rates.spicesMode === 'fixed'
+    ? Number(rates.fixedSpicesKg) || 1
+    : Math.ceil(sheepCount * rates.spicesPerSheepKg);
+
+  // 2. ضيافة الشاهي الحضرمي وفريق عدة الشاي والسموار
+  const teaTeamMembersCount = rates.teaTeamMode === 'fixed'
+    ? Number(rates.fixedTeaTeamSize) || 1
+    : Math.max(4, Math.ceil(totalGuests / rates.guestsPerTeaMember));
+
+  const samovarsCount = rates.samovarsMode === 'fixed'
+    ? Number(rates.fixedSamovarsCount) || 1
+    : Math.max(2, Math.ceil(totalGuests / rates.guestsPerSamovar));
+
+  const teaServingKettlesCount = rates.servingKettlesMode === 'fixed'
+    ? Number(rates.fixedServingKettles) || 1
+    : Math.max(6, Math.ceil(totalGuests / rates.guestsPerServingKettle));
+
+  const teaSugarBags50kg = rates.sugarMode === 'fixed'
+    ? Number(rates.fixedSugarBags) || 1
+    : Math.max(1, Math.ceil(totalGuests / rates.guestsPerSugarBag50kg));
+
+  const teaBoxesKilograms = rates.teaLeavesMode === 'fixed'
+    ? Number(rates.fixedTeaLeavesKg) || 1
+    : Math.ceil(totalGuests * rates.teaKgPerGuest);
+
+  const teaCupsCount = rates.teaCupsMode === 'fixed'
+    ? Number(rates.fixedTeaCups) || 100
+    : Math.ceil(totalGuests * (rates.teaCupsMultiplier || rates.glassesPerGuestMultiplier || 1.5));
+
+  const teaTraysCount = rates.teaTraysMode === 'fixed'
+    ? Number(rates.fixedTeaTrays) || 1
+    : Math.max(4, Math.ceil(totalGuests / (rates.guestsPerTeaTray || 50)));
+
+  const charcoalBags = rates.charcoalMode === 'fixed'
+    ? Number(rates.fixedCharcoalBags) || 1
+    : Math.ceil(samovarsCount * rates.charcoalBagsPerSamovar);
+
+  // 3. برادات وترامس المياه الباردة
+  const largeWaterDispensersCount = rates.waterDispensersMode === 'fixed'
+    ? Number(rates.fixedWaterDispensers) || 1
+    : Math.max(4, Math.ceil(totalGuests / rates.guestsPerWaterDispenser));
+
+  const iceBlocksCount = rates.iceBlocksMode === 'fixed'
+    ? Number(rates.fixedIceBlocks) || 1
+    : largeWaterDispensersCount * rates.iceBlocksPerDispenser;
+
+  const bottledWaterCartons = rates.bottledWaterMode === 'fixed'
+    ? Number(rates.fixedBottledWaterCartons) || 1
+    : Math.ceil(totalGuests / rates.guestsPerBottledCarton);
+
+  const cupsCount = rates.cupsMode === 'fixed'
+    ? Number(rates.fixedCups) || 100
+    : Math.ceil(totalGuests * rates.cupsPerGuestMultiplier);
+
+  // 4. المخادر والفرش
+  const carpetsCount = rates.carpetsMode === 'fixed'
+    ? Number(rates.fixedCarpets) || 1
+    : Math.ceil(totalGuests / rates.guestsPerCarpet);
+
+  const tentsAreaSqMeters = rates.tentsMode === 'fixed'
+    ? Number(rates.fixedTentsArea) || 1
+    : Math.ceil(totalGuests * rates.tentsSqMetersPerGuest);
+
+  const fansOrCoolersCount = rates.fansMode === 'fixed'
+    ? Number(rates.fixedFans) || 1
+    : Math.ceil(totalGuests / rates.guestsPerCoolerFan);
+
+  // 5. حساب المواد الإضافية المخصصة التي أضافها المنظمون
+  const computedCustomItems = (customItems || []).map((item) => {
+    let computedQuantity = 0;
+    if (item.rateType === "ratio" && Number(item.ratio) > 0) {
+      computedQuantity = Math.ceil(totalGuests / Number(item.ratio));
+    } else {
+      computedQuantity = Number(item.fixedAmount) || 0;
+    }
+    return {
+      ...item,
+      computedQuantity
+    };
+  });
 
   return {
     totalGuests,
+    rates,
     food: {
       sheepCount,
       meatKilosApprox,
       riceBags40kg,
-      cookingOilCartons: Math.ceil(riceBags40kg * 1.5),
-      spicesKilos: Math.ceil(sheepCount * 1.2)
+      cookingOilCartons,
+      spicesKilos
     },
     teaHospitality: {
-      teamSize: teaTeamMembersCount,
-      brewingPots: teaBrewingPotsCount,
-      servingKettles: teaServingKettlesCount,
+      teamSize: teaTeamMembersCount, // فريق عدة الشاي
+      samovarsCount: samovarsCount, // السموارات
+      brewingPots: samovarsCount, // متوافق للخلف
+      servingKettles: teaServingKettlesCount, // دلال وبرادات الصب
+      teaTraysCount: teaTraysCount, // صينيات توزيع الشاي
+      teaCupsCount: teaCupsCount, // فناجين واستكانات الشاي
+      glassesCount: teaCupsCount, // متوافق للخلف
       sugarBags50kg: teaSugarBags50kg,
       teaLeavesKg: teaBoxesKilograms,
-      mintBunches: mintBunches,
-      glassesCount: Math.ceil(totalGuests * 1.3),
-      charcoalBags: Math.ceil(teaBrewingPotsCount * 2.5) // أكياس الفحم الطبيعي
+      charcoalBags: charcoalBags
     },
     hydration: {
       largeDispensers: largeWaterDispensersCount,
       iceBlocks: iceBlocksCount,
-      bottledWaterCartons: bottledWaterCartons
+      bottledWaterCartons: bottledWaterCartons,
+      cupsCount: cupsCount
     },
     venueLogistics: {
       carpetsCount,
       tentsAreaSqMeters,
-      fansOrCoolersCount: Math.ceil(totalGuests / 50)
-    }
+      fansOrCoolersCount: fansOrCoolersCount
+    },
+    customSupplies: computedCustomItems
   };
 }
+

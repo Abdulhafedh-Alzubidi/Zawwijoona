@@ -1671,18 +1671,7 @@ export default function App() {
       isRtl={isRtl} />;
   }
 
-  // 3. إذا لم يقم المستخدم بعد بتحديد وضع التخطيط (فردي أو جماعي)، نعرض شاشة اختيار الوضع
-  if (!weddingMode) {
-    return (
-      <WeddingModeSelector
-        onSelectMode={handleSelectMode}
-        currentMode={weddingMode}
-        isRtl={isRtl}
-      />
-    );
-  }
-
-  // 4. EARLY RETURNS (للزواج الفردي فقط في حال عدم اكتمال الإعداد)
+  // 3. EARLY RETURNS (للزواج الفردي فقط في حال عدم اكتمال الإعداد)
   if (weddingMode === 'individual' && !isSetupComplete) {
     return (
       <div dir={isRtl ? 'rtl' : 'ltr'} className={`min-h-screen bg-amber-50 flex items-center justify-center p-4 font-sans ${isRtl ? 'font-arabic' : ''}`}>
@@ -1714,7 +1703,14 @@ export default function App() {
               {t.startPlanning}
             </button>
           </form>
-          <div className="mt-6 text-center">
+          <div className="mt-6 flex flex-col items-center gap-2 text-center">
+            <button
+              type="button"
+              onClick={() => setWeddingMode(null)}
+              className="text-xs text-amber-700 hover:text-amber-900 font-bold hover:underline"
+            >
+              {isRtl ? '← تغيير نوع الزفاف (فردي / جماعي)' : '← Change Wedding Mode (Individual / Mass)'}
+            </button>
             <button onClick={toggleLang} className="text-sm text-gray-500 hover:text-amber-600 underline decoration-dotted">
               {lang === 'ar' ? 'Switch to English' : 'التبديل للعربية'}
             </button>
@@ -1763,27 +1759,34 @@ export default function App() {
 
           {/* Right: Mode Switcher & Language Switch Button */}
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowModeSelectorModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black transition border shadow-sm bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 text-amber-900 hover:border-amber-400 hover:shadow"
-              title={isRtl ? 'تبديل وضع التخطيط (فردي / جماعي)' : 'Switch Planning Mode'}
-            >
-              {weddingMode === 'mass' ? (
-                <>
-                  <Users size={14} className="text-amber-700" />
-                  <span className="hidden sm:inline">{isRtl ? 'عرس جماعي' : 'Mass Wedding'}</span>
-                </>
-              ) : (
-                <>
-                  <CalendarHeart size={14} className="text-rose-600" />
-                  <span className="hidden sm:inline">{isRtl ? 'زواج فردي' : 'Individual'}</span>
-                </>
-              )}
-              <span className="text-[10px] text-amber-800 font-bold underline decoration-dotted bg-amber-100/70 px-1.5 py-0.5 rounded-md">
-                {isRtl ? 'تبديل' : 'Switch'}
+            {weddingMode ? (
+              <button
+                type="button"
+                onClick={() => setShowModeSelectorModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black transition border shadow-sm bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 text-amber-900 hover:border-amber-400 hover:shadow"
+                title={isRtl ? 'تبديل وضع التخطيط (فردي / جماعي)' : 'Switch Planning Mode'}
+              >
+                {weddingMode === 'mass' ? (
+                  <>
+                    <Users size={14} className="text-amber-700" />
+                    <span className="hidden sm:inline">{isRtl ? 'عرس جماعي' : 'Mass Wedding'}</span>
+                  </>
+                ) : (
+                  <>
+                    <CalendarHeart size={14} className="text-rose-600" />
+                    <span className="hidden sm:inline">{isRtl ? 'زواج فردي' : 'Individual'}</span>
+                  </>
+                )}
+                <span className="text-[10px] text-amber-800 font-bold underline decoration-dotted bg-amber-100/70 px-1.5 py-0.5 rounded-md">
+                  {isRtl ? 'تبديل' : 'Switch'}
+                </span>
+              </button>
+            ) : (
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                <Sparkles size={13} className="text-amber-600" />
+                <span>{isRtl ? 'اختيار المسار' : 'Select Mode'}</span>
               </span>
-            </button>
+            )}
 
             <button
               onClick={toggleLang}
@@ -1925,7 +1928,15 @@ export default function App() {
       </nav>
       {/* Main Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {weddingMode === 'mass' ? (
+        {!weddingMode ? (
+          <main className="w-full pb-12">
+            <WeddingModeSelector
+              onSelectMode={handleSelectMode}
+              currentMode={weddingMode}
+              isRtl={isRtl}
+            />
+          </main>
+        ) : weddingMode === 'mass' ? (
           <main className="w-full pb-12">
             <MassWeddingDashboard
               data={massWeddingData}
