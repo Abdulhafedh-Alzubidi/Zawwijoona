@@ -1861,8 +1861,8 @@ export default function App() {
                   type="button"
                   onClick={() => handleSelectMode('individual')}
                   className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-black transition-all ${weddingMode === 'individual'
-                      ? 'bg-white text-rose-600 shadow-xs'
-                      : 'text-gray-500 hover:text-gray-800'
+                    ? 'bg-white text-rose-600 shadow-xs'
+                    : 'text-gray-500 hover:text-gray-800'
                     }`}
                   title={isRtl ? 'زواج فردي' : 'Individual Wedding'}
                 >
@@ -1873,8 +1873,8 @@ export default function App() {
                   type="button"
                   onClick={() => handleSelectMode('mass')}
                   className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-black transition-all ${weddingMode === 'mass'
-                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs'
-                      : 'text-gray-500 hover:text-gray-800'
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs'
+                    : 'text-gray-500 hover:text-gray-800'
                     }`}
                   title={isRtl ? 'عرس جماعي' : 'Mass Wedding'}
                 >
@@ -1920,8 +1920,8 @@ export default function App() {
                       type="button"
                       onClick={() => handleSelectMode('individual')}
                       className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black transition-all ${weddingMode === 'individual'
-                          ? 'bg-white text-rose-600 shadow-xs'
-                          : 'text-gray-500 hover:text-gray-800'
+                        ? 'bg-white text-rose-600 shadow-xs'
+                        : 'text-gray-500 hover:text-gray-800'
                         }`}
                     >
                       <CalendarHeart size={12} className={weddingMode === 'individual' ? 'text-rose-600' : 'text-gray-400'} />
@@ -1931,8 +1931,8 @@ export default function App() {
                       type="button"
                       onClick={() => handleSelectMode('mass')}
                       className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black transition-all ${weddingMode === 'mass'
-                          ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs'
-                          : 'text-gray-500 hover:text-gray-800'
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs'
+                        : 'text-gray-500 hover:text-gray-800'
                         }`}
                     >
                       <Users size={12} className={weddingMode === 'mass' ? 'text-white' : 'text-gray-400'} />

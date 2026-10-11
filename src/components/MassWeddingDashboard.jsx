@@ -433,6 +433,19 @@ export default function MassWeddingDashboard({
         <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/5 rounded-full blur-2xl pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-64 h-64 bg-orange-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
+        {/* Small Edit Event Button in Top Corner */}
+        {onOpenSettings && (
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="absolute top-4 sm:top-6 ltr:right-4 ltr:sm:right-6 rtl:left-4 rtl:sm:left-6 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs backdrop-blur-md transition border border-white/20 hover:border-white/40 shadow-sm"
+            title={isRtl ? 'تعديل بيانات العرس الجماعي' : 'Edit Event Info'}
+          >
+            <Edit3 size={13} className="text-amber-300" />
+            <span>{isRtl ? 'تعديل الفعالية' : 'Edit Event'}</span>
+          </button>
+        )}
+
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -468,30 +481,6 @@ export default function MassWeddingDashboard({
                 </span>
               </span>
             </div>
-          </div>
-
-          {/* Action Buttons in Hero */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3 self-stretch sm:self-auto justify-start sm:justify-end">
-            {onOpenSettings && (
-              <button
-                type="button"
-                onClick={onOpenSettings}
-                className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs sm:text-sm backdrop-blur-sm transition border border-white/20"
-                title={isRtl ? 'تعديل بيانات العرس الجماعي' : 'Edit Event Info'}
-              >
-                <Edit3 size={16} />
-                <span>{isRtl ? 'تعديل الفعالية' : 'Edit Event'}</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={onSwitchMode}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-amber-950 font-black text-xs sm:text-sm shadow-md transition"
-              title={isRtl ? 'التبديل إلى تخطيط زفاف فردي' : 'Switch to Individual Wedding'}
-            >
-              <span>{isRtl ? '👰 التبديل لزواج فردي' : '👰 Switch to Individual'}</span>
-            </button>
           </div>
         </div>
 
