@@ -1747,6 +1747,11 @@ export default function App() {
   }
 
   // Auth check
+  const handleAuthSuccess = () => {
+    // بعد تسجيل الدخول بنجاح، أعد توجيه المستخدم إلى شاشة اختيار الوضع (عرس فردي أو جماعي)
+    console.log('تم تسجيل الدخول بنجاح، جاري إعادة التوجيه...');
+    setUser(auth.currentUser);
+  };
   if (!user) {
     return (
       <Auth
