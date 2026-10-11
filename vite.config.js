@@ -7,6 +7,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate', // لتحديث التطبيق تلقائياً عند رفع كود جديد
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        clientsClaim: true,
+        skipWaiting: true
+      },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
         name: 'تطبيق مراسيم - لتخطيط الزفاف والمناسبات',
