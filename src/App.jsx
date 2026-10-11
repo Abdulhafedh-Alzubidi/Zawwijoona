@@ -10,7 +10,7 @@ import {
   Menu, X, Sparkles, Loader2, Copy, HeartHandshake, Image as ImageIcon, FileText,
   MessageCircle, Send, Upload, FileSpreadsheet,
   Phone, ExternalLink, Camera, Music, Flower2, UtensilsCrossed, Utensils, Coins, Calendar, Users2, Search,
-  Building2, Eye, BookmarkCheck, BookmarkPlus, Check, Star, AlertCircle
+  Building2, Eye, BookmarkCheck, BookmarkPlus, Check, Star, AlertCircle, Edit2
 } from 'lucide-react';
 import { SERVICE_CATEGORIES, SERVICE_TEMPLATES, createWhatsAppInquiryLink } from './data/servicesData';
 import WeddingModeSelector from './components/WeddingModeSelector';
@@ -679,10 +679,15 @@ export default function App() {
   };
 
   const [showGuestModal, setShowGuestModal] = useState(false);
+  const [editingGuest, setEditingGuest] = useState(null);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [editingExpense, setEditingExpense] = useState(null);
   const [showIncomeModal, setShowIncomeModal] = useState(false);
+  const [editingIncome, setEditingIncome] = useState(null);
   const [showEventModal, setShowEventModal] = useState(false);
+  const [editingEvent, setEditingEvent] = useState(null);
   const [showTeamModal, setShowTeamModal] = useState(false);
+  const [editingTeam, setEditingTeam] = useState(null);
   const [showTeamMemberModal, setShowTeamMemberModal] = useState(null);
 
   // AI Chat States
@@ -852,7 +857,7 @@ export default function App() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-gray-800">{t.events}</h2>
-          <button onClick={() => setShowEventModal(true)} className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 flex items-center gap-2 transition shadow-sm">
+          <button onClick={() => { setEditingEvent(null); setShowEventModal(true); }} className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 flex items-center gap-2 transition shadow-sm">
             <Plus size={18} /> {t.addEvent}
           </button>
         </div>
@@ -871,7 +876,22 @@ export default function App() {
                     {eventInfo.titleKey ? t[eventInfo.titleKey] : eventInfo.title}
                   </h3>
                 </div>
-                <button onClick={() => handleDeleteEvent(eventInfo.id)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={16} /></button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => { setEditingEvent(eventInfo); setShowEventModal(true); }}
+                    className="text-gray-400 hover:text-amber-600 p-1 rounded-lg transition"
+                    title={isRtl ? 'تعديل الفعالية' : 'Edit Event'}
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteEvent(eventInfo.id)}
+                    className="text-gray-400 hover:text-red-500 p-1 rounded-lg transition"
+                    title={isRtl ? 'حذف الفعالية' : 'Delete Event'}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-3 mb-4 text-sm text-gray-600">
@@ -921,7 +941,7 @@ export default function App() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-gray-800">{t.volunteerTeam}</h2>
-          <button onClick={() => setShowTeamModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 transition shadow-sm">
+          <button onClick={() => { setEditingTeam(null); setShowTeamModal(true); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 transition shadow-sm">
             <Plus size={18} /> {t.addTeam}
           </button>
         </div>
@@ -936,7 +956,22 @@ export default function App() {
                   {team.phone && <p className="text-xs text-blue-600 font-bold">{isRtl ? 'الهاتف' : 'Phone'}: <span className="text-gray-700">{team.phone}</span></p>}
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  <button onClick={() => handleDeleteTeam(team.id)} className="text-blue-300 hover:text-red-500 transition"><Trash2 size={16} /></button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => { setEditingTeam(team); setShowTeamModal(true); }}
+                      className="text-blue-500 hover:text-blue-800 transition p-0.5"
+                      title={isRtl ? 'تعديل الفريق' : 'Edit Team'}
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteTeam(team.id)}
+                      className="text-blue-300 hover:text-red-500 transition p-0.5"
+                      title={isRtl ? 'حذف الفريق' : 'Delete Team'}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                   <span className="bg-blue-200 text-blue-800 text-xs px-2 py-1 rounded-full font-bold">{team.members.length}</span>
                 </div>
               </div>
@@ -1041,7 +1076,7 @@ export default function App() {
               <span className="hidden sm:inline">{t.importCsv}</span>
               <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
             </label>
-            <button onClick={() => setShowGuestModal(true)} className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 flex items-center gap-2 transition shadow-sm">
+            <button onClick={() => { setEditingGuest(null); setShowGuestModal(true); }} className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 flex items-center gap-2 transition shadow-sm">
               <Plus size={18} /> {t.addGuest}
             </button>
           </div>
@@ -1083,7 +1118,22 @@ export default function App() {
                       <td className="p-4 font-bold text-gray-800">{guest.name}</td>
                       <td className="p-4 text-center font-bold text-amber-600 bg-amber-50/30">+{guest.accompanying}</td>
                       <td className="p-4 text-center">
-                        <button onClick={() => handleDeleteGuest(guest.id)} className="text-gray-400 hover:text-red-500 p-1.5 rounded-lg transition"><Trash2 size={18} /></button>
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => { setEditingGuest(guest); setShowGuestModal(true); }}
+                            className="text-gray-400 hover:text-amber-600 p-1.5 rounded-lg transition"
+                            title={isRtl ? 'تعديل بيانات الضيف' : 'Edit Guest'}
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteGuest(guest.id)}
+                            className="text-gray-400 hover:text-red-500 p-1.5 rounded-lg transition"
+                            title={isRtl ? 'حذف الضيف' : 'Delete Guest'}
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -1107,10 +1157,10 @@ export default function App() {
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-gray-800">{t.finances}</h2>
           <div className="flex gap-2">
-            <button onClick={() => setShowIncomeModal(true)} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 transition shadow-sm">
+            <button onClick={() => { setEditingIncome(null); setShowIncomeModal(true); }} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 transition shadow-sm">
               <Plus size={18} /> <span className="hidden sm:inline">{t.addIncome}</span>
             </button>
-            <button onClick={() => setShowExpenseModal(true)} className="bg-rose-600 text-white px-4 py-2 rounded-lg hover:bg-rose-700 flex items-center gap-2 transition shadow-sm">
+            <button onClick={() => { setEditingExpense(null); setShowExpenseModal(true); }} className="bg-rose-600 text-white px-4 py-2 rounded-lg hover:bg-rose-700 flex items-center gap-2 transition shadow-sm">
               <Plus size={18} /> <span className="hidden sm:inline">{t.addExpense}</span>
             </button>
           </div>
@@ -1139,31 +1189,34 @@ export default function App() {
             <h3 className="font-bold text-lg text-gray-800 mb-4 pb-2 border-b border-gray-100">{t.incomes}</h3>
             <ul className="space-y-3">
               {incomes.length === 0 ? <p className="text-gray-500 text-sm">لا توجد موارد مسجلة.</p> : incomes.map((inc) => (
-
                 <li key={inc.id} className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-xl border border-gray-50 transition">
-
                   <div>
-
                     <span className="font-bold text-gray-800 block">{inc.source}</span>
-
                     <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full font-bold">{inc.type}</span>
-
                   </div>
 
-                  <div className="flex items-center gap-4">
-
+                  <div className="flex items-center gap-3">
                     <span className="text-green-600 font-black">+{inc.amount.toLocaleString()}</span>
-
-                    {inc.type !== (isRtl ? 'شخصي' : 'Personal') && ( // Prevent deleting initial budget easily
-
-                      <button onClick={() => handleDeleteIncome(inc.id)} className="text-gray-300 hover:text-red-500 transition"><Trash2 size={16} /></button>
-
+                    {inc.type !== (isRtl ? 'شخصي' : 'Personal') && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => { setEditingIncome(inc); setShowIncomeModal(true); }}
+                          className="text-gray-400 hover:text-green-600 transition p-1 rounded-lg"
+                          title={isRtl ? 'تعديل الإيراد' : 'Edit Income'}
+                        >
+                          <Edit2 size={15} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteIncome(inc.id)}
+                          className="text-gray-300 hover:text-red-500 transition p-1 rounded-lg"
+                          title={isRtl ? 'حذف الإيراد' : 'Delete Income'}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     )}
-
                   </div>
-
                 </li>
-
               ))}
             </ul>
           </div>
@@ -1174,9 +1227,24 @@ export default function App() {
               {expenses.length === 0 ? <p className="text-gray-500 text-sm">لا توجد مصروفات مسجلة.</p> : expenses.map((exp) => (
                 <li key={exp.id} className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-xl border border-gray-50 transition">
                   <span className="font-bold text-gray-800">{exp.item}</span>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3">
                     <span className="text-rose-600 font-black">-{exp.amount.toLocaleString()}</span>
-                    <button onClick={() => handleDeleteExpense(exp.id)} className="text-gray-300 hover:text-red-500 transition"><Trash2 size={16} /></button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => { setEditingExpense(exp); setShowExpenseModal(true); }}
+                        className="text-gray-400 hover:text-rose-600 transition p-1 rounded-lg"
+                        title={isRtl ? 'تعديل المصروف' : 'Edit Expense'}
+                      >
+                        <Edit2 size={15} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteExpense(exp.id)}
+                        className="text-gray-300 hover:text-red-500 transition p-1 rounded-lg"
+                        title={isRtl ? 'حذف المصروف' : 'Delete Expense'}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
                 </li>
               ))}
@@ -1792,11 +1860,10 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => handleSelectMode('individual')}
-                  className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-black transition-all ${
-                    weddingMode === 'individual'
+                  className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-black transition-all ${weddingMode === 'individual'
                       ? 'bg-white text-rose-600 shadow-xs'
                       : 'text-gray-500 hover:text-gray-800'
-                  }`}
+                    }`}
                   title={isRtl ? 'زواج فردي' : 'Individual Wedding'}
                 >
                   <CalendarHeart size={12} className={weddingMode === 'individual' ? 'text-rose-600' : 'text-gray-400'} />
@@ -1805,11 +1872,10 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => handleSelectMode('mass')}
-                  className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-black transition-all ${
-                    weddingMode === 'mass'
+                  className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-black transition-all ${weddingMode === 'mass'
                       ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs'
                       : 'text-gray-500 hover:text-gray-800'
-                  }`}
+                    }`}
                   title={isRtl ? 'عرس جماعي' : 'Mass Wedding'}
                 >
                   <Users size={12} className={weddingMode === 'mass' ? 'text-white' : 'text-gray-400'} />
@@ -1853,11 +1919,10 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => handleSelectMode('individual')}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black transition-all ${
-                        weddingMode === 'individual'
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black transition-all ${weddingMode === 'individual'
                           ? 'bg-white text-rose-600 shadow-xs'
                           : 'text-gray-500 hover:text-gray-800'
-                      }`}
+                        }`}
                     >
                       <CalendarHeart size={12} className={weddingMode === 'individual' ? 'text-rose-600' : 'text-gray-400'} />
                       <span>{isRtl ? 'زواج فردي' : 'Individual'}</span>
@@ -1865,11 +1930,10 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => handleSelectMode('mass')}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black transition-all ${
-                        weddingMode === 'mass'
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black transition-all ${weddingMode === 'mass'
                           ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs'
                           : 'text-gray-500 hover:text-gray-800'
-                      }`}
+                        }`}
                     >
                       <Users size={12} className={weddingMode === 'mass' ? 'text-white' : 'text-gray-400'} />
                       <span>{isRtl ? 'عرس جماعي' : 'Mass'}</span>
@@ -2088,36 +2152,38 @@ export default function App() {
       {showGuestModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-xl relative">
-            <h3 className="text-xl font-bold mb-4 text-gray-800">{t.addGuest}</h3>
-            <form onSubmit={async (e) => { // 👈 أضفنا async هنا
+            <h3 className="text-xl font-bold mb-4 text-gray-800">
+              {editingGuest ? (isRtl ? 'تعديل بيانات الضيف' : 'Edit Guest') : t.addGuest}
+            </h3>
+            <form key={editingGuest ? editingGuest.id : 'new-guest'} onSubmit={async (e) => {
               e.preventDefault();
               const formData = new FormData(e.target);
 
-              // 1. تجهيز بيانات الضيف الجديد
-              const newGuest = {
-                id: Date.now(),
+              const guestData = {
+                id: editingGuest ? editingGuest.id : Date.now(),
                 name: formData.get('name'),
                 side: formData.get('side'),
-                accompanying: Number(formData.get('accompanying')),
-                status: 'pending'
+                accompanying: Number(formData.get('accompanying')) || 0,
+                status: editingGuest ? (editingGuest.status || 'pending') : 'pending'
               };
 
-              // 2. إنشاء قائمة الضيوف الجديدة (القدامى + الجديد)
-              const updatedGuests = [...guests, newGuest];
+              let updatedGuests;
+              if (editingGuest) {
+                updatedGuests = guests.map(g => g.id === editingGuest.id ? { ...g, ...guestData } : g);
+              } else {
+                updatedGuests = [...guests, guestData];
+              }
 
-              // 3. تحديث الواجهة فوراً (حفظ محلي)
               setGuests(updatedGuests);
               setShowGuestModal(false);
+              setEditingGuest(null);
 
-              // 4. إرسال القائمة الجديدة إلى قاعدة البيانات (Firestore)
               if (user) {
                 try {
                   const userDocRef = doc(db, 'users', user.uid);
-                  // نحدث حقل "الضيوف" فقط، واستخدمنا merge عشان ما نمسح بيانات العرسان
                   await setDoc(userDocRef, {
                     guests: updatedGuests
                   }, { merge: true });
-                  console.log("تم حفظ الضيف في السيرفر بنجاح! 🚀");
                 } catch (error) {
                   console.error("خطأ في حفظ الضيف:", error);
                 }
@@ -2125,24 +2191,26 @@ export default function App() {
             }} className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.guestName}</label>
-                <input type="text" name="name" required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none" />
+                <input type="text" name="name" defaultValue={editingGuest?.name || ''} required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none font-bold" />
               </div>
               <div className="flex gap-4">
                 <div className="flex-1">
                   <label className="block text-sm font-bold text-gray-700 mb-1">{isRtl ? 'الجهة' : 'Side'}</label>
-                  <select name="side" className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none bg-white">
+                  <select name="side" defaultValue={editingGuest?.side || 'groomSide'} className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none bg-white font-bold">
                     <option value="groomSide">{t.groomSide}</option>
                     <option value="brideSide">{t.brideSide}</option>
                   </select>
                 </div>
                 <div className="flex-1">
                   <label className="block text-sm font-bold text-gray-700 mb-1">{t.accompanying}</label>
-                  <input type="number" name="accompanying" defaultValue="0" min="0" className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none" />
+                  <input type="number" name="accompanying" defaultValue={editingGuest?.accompanying !== undefined ? editingGuest.accompanying : 0} min="0" className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none font-bold" />
                 </div>
               </div>
               <div className="flex justify-end gap-2 mt-6">
-                <button type="button" onClick={() => setShowGuestModal(false)} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition">{t.cancel}</button>
-                <button type="submit" className="px-5 py-2.5 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition">{t.save}</button>
+                <button type="button" onClick={() => { setShowGuestModal(false); setEditingGuest(null); }} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition">{t.cancel}</button>
+                <button type="submit" className="px-5 py-2.5 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition">
+                  {editingGuest ? (isRtl ? 'حفظ التعديلات ✓' : 'Save Changes') : t.save}
+                </button>
               </div>
             </form>
           </div>
@@ -2152,34 +2220,36 @@ export default function App() {
       {showExpenseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-xl relative">
-            <h3 className="text-xl font-bold mb-4 text-gray-800">{t.addExpense}</h3>
-            <form onSubmit={async (e) => {
+            <h3 className="text-xl font-bold mb-4 text-gray-800">
+              {editingExpense ? (isRtl ? 'تعديل المصروف' : 'Edit Expense') : t.addExpense}
+            </h3>
+            <form key={editingExpense ? editingExpense.id : 'new-exp'} onSubmit={async (e) => {
               e.preventDefault();
               const formData = new FormData(e.target);
 
-              // 1. تجهيز بيانات المصروف الجديد
-              const newExpense = {
-                id: Date.now(),
+              const expenseData = {
+                id: editingExpense ? editingExpense.id : Date.now(),
                 item: formData.get('item'),
-                amount: Number(formData.get('amount'))
+                amount: Number(formData.get('amount')) || 0
               };
 
-              // 2. إنشاء قائمة المصروفات الجديدة (القديمة + الجديد)
-              const updatedExpenses = [...expenses, newExpense];
+              let updatedExpenses;
+              if (editingExpense) {
+                updatedExpenses = expenses.map(exp => exp.id === editingExpense.id ? { ...exp, ...expenseData } : exp);
+              } else {
+                updatedExpenses = [...expenses, expenseData];
+              }
 
-              // 3. تحديث الواجهة فوراً (حفظ محلي)
               setExpenses(updatedExpenses);
               setShowExpenseModal(false);
+              setEditingExpense(null);
 
-              // 4. إرسال القائمة الجديدة إلى قاعدة البيانات (Firestore)
               if (user) {
                 try {
                   const userDocRef = doc(db, 'users', user.uid);
-                  // نحدث حقل المصروفات فقط، مع استخدام merge
                   await setDoc(userDocRef, {
                     expenses: updatedExpenses
                   }, { merge: true });
-                  console.log("تم حفظ المصروف في السيرفر بنجاح! 💸");
                 } catch (error) {
                   console.error("خطأ في حفظ المصروف:", error);
                 }
@@ -2187,15 +2257,17 @@ export default function App() {
             }} className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.itemName}</label>
-                <input type="text" name="item" required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-rose-500 outline-none" />
+                <input type="text" name="item" defaultValue={editingExpense?.item || ''} required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-rose-500 outline-none font-bold" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.cost} ({t.currency})</label>
-                <input type="number" name="amount" required min="0" className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-rose-500 outline-none" />
+                <input type="number" name="amount" defaultValue={editingExpense?.amount || ''} required min="0" className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-rose-500 outline-none font-bold" />
               </div>
               <div className="flex justify-end gap-2 mt-6">
-                <button type="button" onClick={() => setShowExpenseModal(false)} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition">{t.cancel}</button>
-                <button type="submit" className="px-5 py-2.5 bg-rose-600 text-white font-bold rounded-xl hover:bg-rose-700 transition">{t.save}</button>
+                <button type="button" onClick={() => { setShowExpenseModal(false); setEditingExpense(null); }} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition">{t.cancel}</button>
+                <button type="submit" className="px-5 py-2.5 bg-rose-600 text-white font-bold rounded-xl hover:bg-rose-700 transition">
+                  {editingExpense ? (isRtl ? 'حفظ التعديلات ✓' : 'Save Changes') : t.save}
+                </button>
               </div>
             </form>
           </div>
@@ -2205,35 +2277,37 @@ export default function App() {
       {showIncomeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-xl relative">
-            <h3 className="text-xl font-bold mb-4 text-gray-800">{t.addIncome}</h3>
-            <form onSubmit={async (e) => {
+            <h3 className="text-xl font-bold mb-4 text-gray-800">
+              {editingIncome ? (isRtl ? 'تعديل الإيراد' : 'Edit Income') : t.addIncome}
+            </h3>
+            <form key={editingIncome ? editingIncome.id : 'new-inc'} onSubmit={async (e) => {
               e.preventDefault();
               const formData = new FormData(e.target);
 
-              // 1. تجهيز بيانات المدخول الجديد
-              const newIncome = {
-                id: Date.now(),
+              const incomeData = {
+                id: editingIncome ? editingIncome.id : Date.now(),
                 source: formData.get('source'),
                 type: formData.get('type'),
-                amount: Number(formData.get('amount'))
+                amount: Number(formData.get('amount')) || 0
               };
 
-              // 2. إنشاء قائمة المداخيل الجديدة (القديمة + الجديد)
-              const updatedIncomes = [...incomes, newIncome];
+              let updatedIncomes;
+              if (editingIncome) {
+                updatedIncomes = incomes.map(inc => inc.id === editingIncome.id ? { ...inc, ...incomeData } : inc);
+              } else {
+                updatedIncomes = [...incomes, incomeData];
+              }
 
-              // 3. تحديث الواجهة فوراً (حفظ محلي)
               setIncomes(updatedIncomes);
               setShowIncomeModal(false);
+              setEditingIncome(null);
 
-              // 4. إرسال القائمة الجديدة إلى قاعدة البيانات (Firestore)
               if (user) {
                 try {
                   const userDocRef = doc(db, 'users', user.uid);
-                  // نحدث حقل المداخيل فقط، مع استخدام merge
                   await setDoc(userDocRef, {
                     incomes: updatedIncomes
                   }, { merge: true });
-                  console.log("تم حفظ المدخول في السيرفر بنجاح! 💰");
                 } catch (error) {
                   console.error("خطأ في حفظ المدخول:", error);
                 }
@@ -2241,19 +2315,21 @@ export default function App() {
             }} className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.incomeSource}</label>
-                <input type="text" name="source" placeholder="مثال: عانية من الأصدقاء" required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-green-500 outline-none" />
+                <input type="text" name="source" defaultValue={editingIncome?.source || ''} placeholder="مثال: عانية من الأصدقاء" required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-green-500 outline-none font-bold" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.incomeType}</label>
-                <input type="text" name="type" placeholder="مثال: هدية، سلف، ادخار" required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-green-500 outline-none" />
+                <input type="text" name="type" defaultValue={editingIncome?.type || ''} placeholder="مثال: هدية، سلف، ادخار" required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-green-500 outline-none font-bold" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.cost} ({t.currency})</label>
-                <input type="number" name="amount" required min="0" className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-green-500 outline-none" />
+                <input type="number" name="amount" defaultValue={editingIncome?.amount || ''} required min="0" className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-green-500 outline-none font-bold" />
               </div>
               <div className="flex justify-end gap-2 mt-6">
-                <button type="button" onClick={() => setShowIncomeModal(false)} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition">{t.cancel}</button>
-                <button type="submit" className="px-5 py-2.5 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition">{t.save}</button>
+                <button type="button" onClick={() => { setShowIncomeModal(false); setEditingIncome(null); }} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition">{t.cancel}</button>
+                <button type="submit" className="px-5 py-2.5 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition">
+                  {editingIncome ? (isRtl ? 'حفظ التعديلات ✓' : 'Save Changes') : t.save}
+                </button>
               </div>
             </form>
           </div>
@@ -2263,36 +2339,40 @@ export default function App() {
       {showEventModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-xl relative">
-            <h3 className="text-xl font-bold mb-4 text-gray-800">{t.addEvent}</h3>
-            <form onSubmit={async (e) => {
+            <h3 className="text-xl font-bold mb-4 text-gray-800">
+              {editingEvent ? (isRtl ? 'تعديل الفعالية' : 'Edit Event') : t.addEvent}
+            </h3>
+            <form key={editingEvent ? editingEvent.id : 'new-event'} onSubmit={async (e) => {
               e.preventDefault();
               const formData = new FormData(e.target);
 
-              // 1. تجهيز بيانات الحدث/الخطة
-              const newEvent = {
-                id: Date.now(),
-                title: formData.get('title'), // تأكد من اسم الحقل عندك
+              const eventData = {
+                id: editingEvent ? editingEvent.id : Date.now(),
+                title: formData.get('title'),
+                titleKey: editingEvent?.titleKey,
                 date: formData.get('date'),
                 location: formData.get('location'),
                 notes: formData.get('notes'),
-                completed: false // افتراضياً المهمة غير منجزة
+                completed: editingEvent ? editingEvent.completed : false
               };
 
-              // 2. دمج الخطة الجديدة مع الخطط السابقة
-              const updatedEvents = [...events, newEvent];
+              let updatedEvents;
+              if (editingEvent) {
+                updatedEvents = events.map(ev => ev.id === editingEvent.id ? { ...ev, ...eventData } : ev);
+              } else {
+                updatedEvents = [...events, eventData];
+              }
 
-              // 3. تحديث الشاشة
               setEvents(updatedEvents);
               setShowEventModal(false);
+              setEditingEvent(null);
 
-              // 4. الحفظ في فايربيس
               if (user) {
                 try {
                   const userDocRef = doc(db, 'users', user.uid);
                   await setDoc(userDocRef, {
                     events: updatedEvents
                   }, { merge: true });
-                  console.log("تم حفظ خطة الزفاف في السيرفر بنجاح! 📅");
                 } catch (error) {
                   console.error("خطأ في حفظ الخطة:", error);
                 }
@@ -2300,23 +2380,25 @@ export default function App() {
             }} className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.eventTitle}</label>
-                <input type="text" name="title" placeholder="مثال: سمرة العريس، غسلة العروس" required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none" />
+                <input type="text" name="title" defaultValue={editingEvent ? (editingEvent.title || (editingEvent.titleKey ? t[editingEvent.titleKey] : '')) : ''} placeholder="مثال: سمرة العريس، غسلة العروس" required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none font-bold" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.eventDate}</label>
-                <input type="date" name="date" min={todayStr} className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none" />
+                <input type="date" name="date" defaultValue={editingEvent?.date || ''} min={todayStr} className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none font-bold" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.eventLocation}</label>
-                <input type="text" name="location" placeholder="مكان إقامة الفعالية" className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none" />
+                <input type="text" name="location" defaultValue={editingEvent?.location || ''} placeholder="مكان إقامة الفعالية" className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none font-bold" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.notes}</label>
-                <textarea name="notes" rows="2" className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none resize-none"></textarea>
+                <textarea name="notes" defaultValue={editingEvent?.notes || ''} rows="2" className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none resize-none font-medium"></textarea>
               </div>
               <div className="flex justify-end gap-2 mt-6">
-                <button type="button" onClick={() => setShowEventModal(false)} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition">{t.cancel}</button>
-                <button type="submit" className="px-5 py-2.5 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition">{t.save}</button>
+                <button type="button" onClick={() => { setShowEventModal(false); setEditingEvent(null); }} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition">{t.cancel}</button>
+                <button type="submit" className="px-5 py-2.5 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition">
+                  {editingEvent ? (isRtl ? 'حفظ التعديلات ✓' : 'Save Changes') : t.save}
+                </button>
               </div>
             </form>
           </div>
@@ -2326,36 +2408,39 @@ export default function App() {
       {showTeamModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-xl relative">
-            <h3 className="text-xl font-bold mb-4 text-gray-800">{t.addTeam}</h3>
-            <form onSubmit={async (e) => {
+            <h3 className="text-xl font-bold mb-4 text-gray-800">
+              {editingTeam ? (isRtl ? 'تعديل الفريق' : 'Edit Team') : t.addTeam}
+            </h3>
+            <form key={editingTeam ? editingTeam.id : 'new-team'} onSubmit={async (e) => {
               e.preventDefault();
               const formData = new FormData(e.target);
 
-              // 1. تجهيز بيانات الفريق
-              const newTeam = {
-                id: Date.now(),
-                name: formData.get('name'), // تأكد من اسم الحقل عندك
+              const teamData = {
+                id: editingTeam ? editingTeam.id : Date.now(),
+                name: formData.get('name'),
                 leader: formData.get('leader'),
                 phone: formData.get('phone'),
                 tasks: formData.get('tasks'),
-                members: [] // مصفوفة فارغة لأعضاء الفريق
+                members: editingTeam?.members || []
               };
 
-              // 2. دمج الفريق الجديد مع الفرق السابقة
-              const updatedTeams = [...teams, newTeam];
+              let updatedTeams;
+              if (editingTeam) {
+                updatedTeams = teams.map(tm => tm.id === editingTeam.id ? { ...tm, ...teamData } : tm);
+              } else {
+                updatedTeams = [...teams, teamData];
+              }
 
-              // 3. تحديث الشاشة
               setTeams(updatedTeams);
               setShowTeamModal(false);
+              setEditingTeam(null);
 
-              // 4. الحفظ في فايربيس
               if (user) {
                 try {
                   const userDocRef = doc(db, 'users', user.uid);
                   await setDoc(userDocRef, {
                     teams: updatedTeams
                   }, { merge: true });
-                  console.log("تم حفظ الفريق في السيرفر بنجاح! 🤝");
                 } catch (error) {
                   console.error("خطأ في حفظ الفريق:", error);
                 }
@@ -2363,23 +2448,25 @@ export default function App() {
             }} className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.teamName}</label>
-                <input type="text" name="name" placeholder="مثال: فريق الشرح" required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-none" />
+                <input type="text" name="name" defaultValue={editingTeam?.name || ''} placeholder="مثال: فريق الشرح" required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-none font-bold" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.teamLeader}</label>
-                <input type="text" name="leader" placeholder="اسم مسؤول الفريق" required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-none" />
+                <input type="text" name="leader" defaultValue={editingTeam?.leader || ''} placeholder="اسم مسؤول الفريق" required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-none font-bold" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{isRtl ? 'رقم الهاتف' : 'Phone Number'}</label>
-                <input type="tel" name="phone" placeholder="رقم هاتف مسؤول الفريق" required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-none" />
+                <input type="tel" name="phone" defaultValue={editingTeam?.phone || ''} placeholder="رقم هاتف مسؤول الفريق" required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-none font-bold" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.teamTasks}</label>
-                <textarea name="tasks" placeholder="المهام المنوطة بالفريق..." required rows="2" className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-none resize-none"></textarea>
+                <textarea name="tasks" defaultValue={editingTeam?.tasks || ''} placeholder="المهام المنوطة بالفريق..." required rows="2" className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-blue-500 outline-none resize-none font-medium"></textarea>
               </div>
               <div className="flex justify-end gap-2 mt-6">
-                <button type="button" onClick={() => setShowTeamModal(false)} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition">{t.cancel}</button>
-                <button type="submit" className="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition">{t.save}</button>
+                <button type="button" onClick={() => { setShowTeamModal(false); setEditingTeam(null); }} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition">{t.cancel}</button>
+                <button type="submit" className="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition">
+                  {editingTeam ? (isRtl ? 'حفظ التعديلات ✓' : 'Save Changes') : t.save}
+                </button>
               </div>
             </form>
           </div>

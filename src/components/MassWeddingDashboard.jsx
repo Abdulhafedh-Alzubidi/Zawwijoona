@@ -34,9 +34,15 @@ export default function MassWeddingDashboard({
 
   // --- Modals State ---
   const [showAddCoupleModal, setShowAddCoupleModal] = useState(false);
+  const [editingCouple, setEditingCouple] = useState(null);
   const [showAddCommitteeModal, setShowAddCommitteeModal] = useState(false);
+  const [editingCommittee, setEditingCommittee] = useState(null);
   const [showAddSponsorModal, setShowAddSponsorModal] = useState(false);
+  const [editingSponsor, setEditingSponsor] = useState(null);
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
+  const [editingExpense, setEditingExpense] = useState(null);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [editingScheduleItem, setEditingScheduleItem] = useState(null);
   const [showEditRatesModal, setShowEditRatesModal] = useState(false);
   const [showAddSupplyModal, setShowAddSupplyModal] = useState(false);
   const [editingSupplyItem, setEditingSupplyItem] = useState(null);
@@ -118,16 +124,31 @@ export default function MassWeddingDashboard({
   }, [couples, completedCouplesCount, totalSponsorships, totalExpenses, committees]);
 
   // --- Handlers: Couples ---
-  const handleAddCouple = (newCouple) => {
-    const updated = [newCouple, ...couples];
+  const handleSaveCouple = (coupleData) => {
+    let updated;
+    if (coupleData.id && couples.some((c) => c.id === coupleData.id)) {
+      updated = couples.map((c) => (c.id === coupleData.id ? { ...c, ...coupleData } : c));
+    } else {
+      updated = [{ ...coupleData, id: coupleData.id || `c-${Date.now()}` }, ...couples];
+    }
     onUpdateData({ ...data, couples: updated });
     setShowAddCoupleModal(false);
+    setEditingCouple(null);
+  };
+
+  const handleEditCouple = (couple) => {
+    setEditingCouple(couple);
+    setShowAddCoupleModal(true);
   };
 
   const handleDeleteCouple = (coupleId) => {
     if (window.confirm(isRtl ? 'هل أنت متأكد من حذف هذا العريس من السجل؟' : 'Remove this couple from the roster?')) {
       const updated = couples.filter((c) => c.id !== coupleId);
       onUpdateData({ ...data, couples: updated });
+      if (editingCouple?.id === coupleId) {
+        setEditingCouple(null);
+        setShowAddCoupleModal(false);
+      }
     }
   };
 
@@ -150,40 +171,89 @@ export default function MassWeddingDashboard({
   };
 
   // --- Handlers: Committees ---
-  const handleAddCommittee = (newCom) => {
-    const updated = [...committees, newCom];
+  const handleSaveCommittee = (comData) => {
+    let updated;
+    if (comData.id && committees.some((com) => com.id === comData.id)) {
+      updated = committees.map((com) => (com.id === comData.id ? { ...com, ...comData } : com));
+    } else {
+      updated = [...committees, { ...comData, id: comData.id || `com-${Date.now()}` }];
+    }
     onUpdateData({ ...data, committees: updated });
     setShowAddCommitteeModal(false);
+    setEditingCommittee(null);
+  };
+
+  const handleEditCommittee = (committee) => {
+    setEditingCommittee(committee);
+    setShowAddCommitteeModal(true);
   };
 
   const handleDeleteCommittee = (comId) => {
     if (window.confirm(isRtl ? 'هل أنت متأكد من حذف هذه اللجنة؟' : 'Delete this committee?')) {
       const updated = committees.filter((com) => com.id !== comId);
       onUpdateData({ ...data, committees: updated });
+      if (editingCommittee?.id === comId) {
+        setEditingCommittee(null);
+        setShowAddCommitteeModal(false);
+      }
     }
   };
 
   // --- Handlers: Sponsors & Expenses ---
-  const handleAddSponsor = (newSp) => {
-    const updated = [newSp, ...sponsorships];
+  const handleSaveSponsor = (spData) => {
+    let updated;
+    if (spData.id && sponsorships.some((sp) => sp.id === spData.id)) {
+      updated = sponsorships.map((sp) => (sp.id === spData.id ? { ...sp, ...spData } : sp));
+    } else {
+      updated = [{ ...spData, id: spData.id || `sp-${Date.now()}` }, ...sponsorships];
+    }
     onUpdateData({ ...data, sponsorships: updated });
     setShowAddSponsorModal(false);
+    setEditingSponsor(null);
+  };
+
+  const handleEditSponsor = (sponsor) => {
+    setEditingSponsor(sponsor);
+    setShowAddSponsorModal(true);
   };
 
   const handleDeleteSponsor = (spId) => {
-    const updated = sponsorships.filter((sp) => sp.id !== spId);
-    onUpdateData({ ...data, sponsorships: updated });
+    if (window.confirm(isRtl ? 'هل أنت متأكد من حذف هذا الراعي؟' : 'Delete this sponsor?')) {
+      const updated = sponsorships.filter((sp) => sp.id !== spId);
+      onUpdateData({ ...data, sponsorships: updated });
+      if (editingSponsor?.id === spId) {
+        setEditingSponsor(null);
+        setShowAddSponsorModal(false);
+      }
+    }
   };
 
-  const handleAddExpense = (newExp) => {
-    const updated = [newExp, ...expenses];
+  const handleSaveExpense = (expData) => {
+    let updated;
+    if (expData.id && expenses.some((exp) => exp.id === expData.id)) {
+      updated = expenses.map((exp) => (exp.id === expData.id ? { ...exp, ...expData } : exp));
+    } else {
+      updated = [{ ...expData, id: expData.id || `exp-${Date.now()}` }, ...expenses];
+    }
     onUpdateData({ ...data, expenses: updated });
     setShowAddExpenseModal(false);
+    setEditingExpense(null);
+  };
+
+  const handleEditExpense = (expense) => {
+    setEditingExpense(expense);
+    setShowAddExpenseModal(true);
   };
 
   const handleDeleteExpense = (expId) => {
-    const updated = expenses.filter((exp) => exp.id !== expId);
-    onUpdateData({ ...data, expenses: updated });
+    if (window.confirm(isRtl ? 'هل أنت متأكد من حذف هذا المصروف؟' : 'Delete this expense?')) {
+      const updated = expenses.filter((exp) => exp.id !== expId);
+      onUpdateData({ ...data, expenses: updated });
+      if (editingExpense?.id === expId) {
+        setEditingExpense(null);
+        setShowAddExpenseModal(false);
+      }
+    }
   };
 
   // --- Handlers: Smart Calculator Customization ---
@@ -242,6 +312,34 @@ export default function MassWeddingDashboard({
   };
 
   // --- Handlers: Schedule ---
+  const handleSaveSchedule = (schData) => {
+    let updated;
+    if (schData.id && schedule.some((item) => item.id === schData.id)) {
+      updated = schedule.map((item) => (item.id === schData.id ? { ...item, ...schData } : item));
+    } else {
+      updated = [...schedule, { ...schData, id: schData.id || `sch-${Date.now()}` }];
+    }
+    onUpdateData({ ...data, schedule: updated });
+    setShowScheduleModal(false);
+    setEditingScheduleItem(null);
+  };
+
+  const handleEditScheduleItem = (item) => {
+    setEditingScheduleItem(item);
+    setShowScheduleModal(true);
+  };
+
+  const handleDeleteScheduleItem = (schId) => {
+    if (window.confirm(isRtl ? 'هل أنت متأكد من حذف هذه الفعالية من الجدول؟' : 'Delete this schedule event?')) {
+      const updated = schedule.filter((item) => item.id !== schId);
+      onUpdateData({ ...data, schedule: updated });
+      if (editingScheduleItem?.id === schId) {
+        setEditingScheduleItem(null);
+        setShowScheduleModal(false);
+      }
+    }
+  };
+
   const handleToggleScheduleStatus = (schId) => {
     const updated = schedule.map((item) => {
       if (item.id === schId) {
@@ -555,7 +653,7 @@ export default function MassWeddingDashboard({
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <button
                     type="button"
-                    onClick={() => setShowAddCoupleModal(true)}
+                    onClick={() => { setEditingCouple(null); setShowAddCoupleModal(true); }}
                     className="p-3.5 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs flex flex-col items-center justify-center gap-2 border border-amber-200 transition"
                   >
                     <Users2 size={20} className="text-amber-700" />
@@ -564,7 +662,7 @@ export default function MassWeddingDashboard({
 
                   <button
                     type="button"
-                    onClick={() => setShowAddSponsorModal(true)}
+                    onClick={() => { setEditingSponsor(null); setShowAddSponsorModal(true); }}
                     className="p-3.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs flex flex-col items-center justify-center gap-2 border border-emerald-200 transition"
                   >
                     <Coins size={20} className="text-emerald-700" />
@@ -774,7 +872,7 @@ export default function MassWeddingDashboard({
 
             <button
               type="button"
-              onClick={() => setShowAddCoupleModal(true)}
+              onClick={() => { setEditingCouple(null); setShowAddCoupleModal(true); }}
               className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs sm:text-sm shadow-md transition shrink-0"
             >
               <Plus size={18} />
@@ -800,14 +898,24 @@ export default function MassWeddingDashboard({
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteCouple(c.id)}
-                    className="opacity-0 group-hover:opacity-100 p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
-                    title={isRtl ? 'حذف العريس' : 'Delete'}
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="flex items-center gap-1 opacity-90 sm:opacity-0 group-hover:opacity-100 transition">
+                    <button
+                      type="button"
+                      onClick={() => handleEditCouple(c)}
+                      className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition"
+                      title={isRtl ? 'تعديل بيانات العريس' : 'Edit Couple'}
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCouple(c.id)}
+                      className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
+                      title={isRtl ? 'حذف العريس' : 'Delete'}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
@@ -912,7 +1020,7 @@ export default function MassWeddingDashboard({
 
             <button
               type="button"
-              onClick={() => setShowAddCommitteeModal(true)}
+              onClick={() => { setEditingCommittee(null); setShowAddCommitteeModal(true); }}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs sm:text-sm shadow-md transition"
             >
               <Plus size={16} />
@@ -932,14 +1040,24 @@ export default function MassWeddingDashboard({
                     <p className="text-xs text-gray-500">{com.nameEn}</p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteCommittee(com.id)}
-                    className="opacity-0 group-hover:opacity-100 p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
-                    title={isRtl ? 'حذف اللجنة' : 'Delete'}
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="flex items-center gap-1 opacity-90 sm:opacity-0 group-hover:opacity-100 transition">
+                    <button
+                      type="button"
+                      onClick={() => handleEditCommittee(com)}
+                      className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition"
+                      title={isRtl ? 'تعديل بيانات اللجنة' : 'Edit Committee'}
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCommittee(com.id)}
+                      className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
+                      title={isRtl ? 'حذف اللجنة' : 'Delete'}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -1006,7 +1124,7 @@ export default function MassWeddingDashboard({
 
                 <button
                   type="button"
-                  onClick={() => setShowAddSponsorModal(true)}
+                  onClick={() => { setEditingSponsor(null); setShowAddSponsorModal(true); }}
                   className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition"
                 >
                   <Plus size={15} />
@@ -1031,17 +1149,28 @@ export default function MassWeddingDashboard({
                       {sp.notes && <p className="text-[11px] text-gray-400 mt-1 italic">{sp.notes}</p>}
                     </div>
 
-                    <div className="text-left rtl:text-right shrink-0">
+                    <div className="text-left rtl:text-right shrink-0 flex flex-col items-end">
                       <div className="font-black text-emerald-700 text-sm">
                         {sp.amount?.toLocaleString()} ر.ي
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteSponsor(sp.id)}
-                        className="text-gray-400 hover:text-rose-600 text-[11px] mt-1 transition"
-                      >
-                        {isRtl ? 'حذف' : 'Remove'}
-                      </button>
+                      <div className="flex items-center gap-2 mt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleEditSponsor(sp)}
+                          className="text-gray-500 hover:text-emerald-700 text-[11px] font-bold transition flex items-center gap-0.5"
+                        >
+                          <Edit2 size={12} />
+                          <span>{isRtl ? 'تعديل' : 'Edit'}</span>
+                        </button>
+                        <span className="text-gray-300">•</span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSponsor(sp.id)}
+                          className="text-gray-400 hover:text-rose-600 text-[11px] transition"
+                        >
+                          {isRtl ? 'حذف' : 'Remove'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1063,7 +1192,7 @@ export default function MassWeddingDashboard({
 
                 <button
                   type="button"
-                  onClick={() => setShowAddExpenseModal(true)}
+                  onClick={() => { setEditingExpense(null); setShowAddExpenseModal(true); }}
                   className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition"
                 >
                   <Plus size={15} />
@@ -1082,17 +1211,28 @@ export default function MassWeddingDashboard({
                       <span className="text-[11px] text-gray-400 font-semibold">{exp.category}</span>
                     </div>
 
-                    <div className="text-left rtl:text-right shrink-0">
+                    <div className="text-left rtl:text-right shrink-0 flex flex-col items-end">
                       <div className="font-black text-rose-700 text-sm">
                         {exp.amount?.toLocaleString()} ر.ي
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteExpense(exp.id)}
-                        className="text-gray-400 hover:text-rose-600 text-[11px] mt-1 transition"
-                      >
-                        {isRtl ? 'حذف' : 'Remove'}
-                      </button>
+                      <div className="flex items-center gap-2 mt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleEditExpense(exp)}
+                          className="text-gray-500 hover:text-rose-700 text-[11px] font-bold transition flex items-center gap-0.5"
+                        >
+                          <Edit2 size={12} />
+                          <span>{isRtl ? 'تعديل' : 'Edit'}</span>
+                        </button>
+                        <span className="text-gray-300">•</span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteExpense(exp.id)}
+                          className="text-gray-400 hover:text-rose-600 text-[11px] transition"
+                        >
+                          {isRtl ? 'حذف' : 'Remove'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1107,7 +1247,7 @@ export default function MassWeddingDashboard({
       {/* === SUB-TAB 5: UNIFIED CEREMONIES SCHEDULE === */}
       {activeSubTab === 'schedule' && (
         <div className="bg-white p-6 rounded-3xl border border-gray-200/80 shadow-sm space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-base sm:text-lg font-black text-gray-900">
                 {isRtl ? 'جدول برنامج ومراحل الفعاليات المشتركة' : 'Unified Ceremonies Timeline'}
@@ -1116,6 +1256,15 @@ export default function MassWeddingDashboard({
                 {isRtl ? 'تسلسل فعاليات يوم الزفاف من استقبال الوفود حتى السمرة الجماعية، اضغط على الحالة لتحديثها' : 'Chronological sequence of the day. Click status badge to cycle state.'}
               </p>
             </div>
+
+            <button
+              type="button"
+              onClick={() => { setEditingScheduleItem(null); setShowScheduleModal(true); }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs sm:text-sm shadow-md transition shrink-0"
+            >
+              <Plus size={16} />
+              <span>{isRtl ? 'إضافة فعالية' : 'Add Event'}</span>
+            </button>
           </div>
 
           <div className="relative border-s-2 border-amber-200 ms-4 space-y-6">
@@ -1132,27 +1281,46 @@ export default function MassWeddingDashboard({
                   {idx + 1}
                 </span>
 
-                <div className="p-4 rounded-2xl bg-gray-50 border border-gray-100 hover:border-amber-200 transition space-y-2">
+                <div className="p-4 rounded-2xl bg-gray-50 border border-gray-100 hover:border-amber-200 transition space-y-2 relative group">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <span className="font-black text-amber-800 text-xs sm:text-sm bg-amber-100 px-3 py-1 rounded-xl w-fit">
                       {item.time}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleScheduleStatus(item.id)}
-                      className={`px-3 py-1 rounded-full text-xs font-bold transition w-fit ${item.status === 'completed'
-                        ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                        : item.status === 'ongoing'
-                          ? 'bg-amber-100 text-amber-800 hover:bg-amber-200 animate-pulse'
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
-                    >
-                      {item.status === 'completed'
-                        ? isRtl ? 'تم بنجاح ✓' : 'Completed ✓'
-                        : item.status === 'ongoing'
-                          ? isRtl ? 'جاري الآن ⏳' : 'Ongoing ⏳'
-                          : isRtl ? 'قادم 🕒' : 'Upcoming 🕒'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleScheduleStatus(item.id)}
+                        className={`px-3 py-1 rounded-full text-xs font-bold transition w-fit ${item.status === 'completed'
+                          ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                          : item.status === 'ongoing'
+                            ? 'bg-amber-100 text-amber-800 hover:bg-amber-200 animate-pulse'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                      >
+                        {item.status === 'completed'
+                          ? isRtl ? 'تم بنجاح ✓' : 'Completed ✓'
+                          : item.status === 'ongoing'
+                            ? isRtl ? 'جاري الآن ⏳' : 'Ongoing ⏳'
+                            : isRtl ? 'قادم 🕒' : 'Upcoming 🕒'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleEditScheduleItem(item)}
+                        className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
+                        title={isRtl ? 'تعديل الفعالية' : 'Edit Event'}
+                      >
+                        <Edit2 size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteScheduleItem(item.id)}
+                        className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                        title={isRtl ? 'حذف الفعالية' : 'Delete Event'}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </div>
 
                   <h4 className="font-black text-base text-gray-900">{item.title}</h4>
@@ -1716,17 +1884,31 @@ export default function MassWeddingDashboard({
 
       {/* --- MODALS --- */}
 
-      {/* Modal 1: Add Couple */}
+      {/* Modal 1: Add / Edit Couple */}
       {showAddCoupleModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-100 space-y-4">
-            <h3 className="text-lg font-black text-gray-900">{isRtl ? 'تسجيل عريس جديد في العرس الجماعي' : 'Add New Couple'}</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-black text-gray-900">
+                {editingCouple
+                  ? (isRtl ? 'تعديل بيانات العريس' : 'Edit Couple')
+                  : (isRtl ? 'تسجيل عريس جديد في العرس الجماعي' : 'Add New Couple')}
+              </h3>
+              <button
+                type="button"
+                onClick={() => { setShowAddCoupleModal(false); setEditingCouple(null); }}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-xl transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
             <form
+              key={editingCouple ? editingCouple.id : 'new-couple'}
               onSubmit={(e) => {
                 e.preventDefault();
                 const fd = new FormData(e.target);
-                handleAddCouple({
-                  id: `c-${Date.now()}`,
+                handleSaveCouple({
+                  id: editingCouple?.id,
                   groomName: fd.get('groomName'),
                   brideName: fd.get('brideName'),
                   tribe: fd.get('tribe') || 'آل...',
@@ -1734,7 +1916,7 @@ export default function MassWeddingDashboard({
                   phone: fd.get('phone') || '',
                   medicalStatus: fd.get('medicalStatus'),
                   contractStatus: fd.get('contractStatus'),
-                  aidStatus: 'processing',
+                  aidStatus: editingCouple?.aidStatus || 'processing',
                   guestQuota: Number(fd.get('guestQuota')) || 35,
                   notes: fd.get('notes') || ''
                 });
@@ -1743,127 +1925,163 @@ export default function MassWeddingDashboard({
             >
               <div>
                 <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'اسم العريس الرباعي' : 'Groom Name'}</label>
-                <input type="text" name="groomName" required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                <input type="text" name="groomName" defaultValue={editingCouple?.groomName || ''} required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
               </div>
               <div>
                 <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'اسم العروس / العائلة' : 'Bride Family'}</label>
-                <input type="text" name="brideName" required placeholder="كريمة..." className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                <input type="text" name="brideName" defaultValue={editingCouple?.brideName || ''} required placeholder="كريمة..." className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'القبيلة / العائلة' : 'Tribe / Family'}</label>
-                  <input type="text" name="tribe" required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                  <input type="text" name="tribe" defaultValue={editingCouple?.tribe || ''} required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
                 </div>
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'المنطقة / الحي' : 'Area'}</label>
-                  <input type="text" name="area" required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                  <input type="text" name="area" defaultValue={editingCouple?.area || weddingInfo.city || ''} required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'رقم الهاتف' : 'Phone'}</label>
-                  <input type="text" name="phone" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5" dir="ltr" />
+                  <input type="text" name="phone" defaultValue={editingCouple?.phone || ''} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5" dir="ltr" />
                 </div>
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'بطاقات الدعوة' : 'Invitations'}</label>
-                  <input type="number" name="guestQuota" defaultValue="35" min="5" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                  <input type="number" name="guestQuota" defaultValue={editingCouple?.guestQuota || 35} min="5" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'الفحص الطبي' : 'Medical'}</label>
-                  <select name="medicalStatus" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold">
+                  <select name="medicalStatus" defaultValue={editingCouple?.medicalStatus || 'completed'} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold">
                     <option value="completed">{isRtl ? 'مكتمل ✓' : 'Completed'}</option>
                     <option value="pending">{isRtl ? 'قيد الإجراء' : 'Pending'}</option>
                   </select>
                 </div>
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'عقد القران' : 'Contract'}</label>
-                  <select name="contractStatus" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold">
+                  <select name="contractStatus" defaultValue={editingCouple?.contractStatus || 'completed'} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold">
                     <option value="completed">{isRtl ? 'موثق ✓' : 'Completed'}</option>
                     <option value="in_progress">{isRtl ? 'قيد التوثيق' : 'In Progress'}</option>
                   </select>
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
-                <button type="button" onClick={() => setShowAddCoupleModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 font-bold">{isRtl ? 'إلغاء' : 'Cancel'}</button>
-                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-amber-600 text-white font-bold">{isRtl ? 'حفظ العريس' : 'Save'}</button>
+                <button type="button" onClick={() => { setShowAddCoupleModal(false); setEditingCouple(null); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 font-bold">{isRtl ? 'إلغاء' : 'Cancel'}</button>
+                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition">
+                  {editingCouple ? (isRtl ? 'حفظ التعديلات ✓' : 'Save Changes') : (isRtl ? 'حفظ العريس' : 'Save')}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Modal 2: Add Committee */}
+      {/* Modal 2: Add / Edit Committee */}
       {showAddCommitteeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-100 space-y-4">
-            <h3 className="text-lg font-black text-gray-900">{isRtl ? 'إضافة لجنة تنظيمية' : 'Add Committee'}</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-black text-gray-900">
+                {editingCommittee
+                  ? (isRtl ? 'تعديل بيانات اللجنة' : 'Edit Committee')
+                  : (isRtl ? 'إضافة لجنة تنظيمية' : 'Add Committee')}
+              </h3>
+              <button
+                type="button"
+                onClick={() => { setShowAddCommitteeModal(false); setEditingCommittee(null); }}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-xl transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
             <form
+              key={editingCommittee ? editingCommittee.id : 'new-committee'}
               onSubmit={(e) => {
                 e.preventDefault();
                 const fd = new FormData(e.target);
-                handleAddCommittee({
-                  id: `com-${Date.now()}`,
+                handleSaveCommittee({
+                  id: editingCommittee?.id,
                   name: fd.get('name'),
                   nameEn: fd.get('name'),
                   leader: fd.get('leader'),
                   phone: fd.get('phone') || '',
                   volunteersCount: Number(fd.get('volunteersCount')) || 10,
                   responsibilities: [fd.get('task1'), fd.get('task2')].filter(Boolean),
-                  status: 'ready'
+                  status: editingCommittee?.status || 'ready'
                 });
               }}
               className="space-y-3 text-xs"
             >
               <div>
                 <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'اسم اللجنة' : 'Committee Name'}</label>
-                <input type="text" name="name" required placeholder={isRtl ? 'لجنة...' : 'Committee...'} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                <input type="text" name="name" defaultValue={editingCommittee?.name || ''} required placeholder={isRtl ? 'لجنة...' : 'Committee...'} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'مشرف اللجنة' : 'Leader'}</label>
-                  <input type="text" name="leader" required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                  <input type="text" name="leader" defaultValue={editingCommittee?.leader || ''} required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
                 </div>
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'عدد المتطوعين' : 'Volunteers'}</label>
-                  <input type="number" name="volunteersCount" defaultValue="15" min="1" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                  <input type="number" name="volunteersCount" defaultValue={editingCommittee?.volunteersCount || 15} min="1" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
                 </div>
               </div>
               <div>
                 <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'رقم الهاتف' : 'Phone'}</label>
-                <input type="text" name="phone" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5" dir="ltr" />
+                <input type="text" name="phone" defaultValue={editingCommittee?.phone || ''} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5" dir="ltr" />
               </div>
               <div>
                 <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'المهمة الرئيسية الأولى' : 'Task 1'}</label>
-                <input type="text" name="task1" placeholder={isRtl ? 'متابعة...' : 'Task...'} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5" />
+                <input type="text" name="task1" defaultValue={editingCommittee?.responsibilities?.[0] || ''} placeholder={isRtl ? 'متابعة...' : 'Task...'} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5" />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'المهمة الرئيسية الثانية' : 'Task 2'}</label>
+                <input type="text" name="task2" defaultValue={editingCommittee?.responsibilities?.[1] || ''} placeholder={isRtl ? 'تنسيق...' : 'Task...'} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5" />
               </div>
               <div className="flex gap-2 pt-2">
-                <button type="button" onClick={() => setShowAddCommitteeModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 font-bold">{isRtl ? 'إلغاء' : 'Cancel'}</button>
-                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-amber-600 text-white font-bold">{isRtl ? 'حفظ اللجنة' : 'Save'}</button>
+                <button type="button" onClick={() => { setShowAddCommitteeModal(false); setEditingCommittee(null); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 font-bold">{isRtl ? 'إلغاء' : 'Cancel'}</button>
+                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition">
+                  {editingCommittee ? (isRtl ? 'حفظ التعديلات ✓' : 'Save Changes') : (isRtl ? 'حفظ اللجنة' : 'Save')}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Modal 3: Add Sponsor */}
+      {/* Modal 3: Add / Edit Sponsor */}
       {showAddSponsorModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-100 space-y-4">
-            <h3 className="text-lg font-black text-gray-900">{isRtl ? 'تسجيل راعي أو داعم' : 'Add Sponsor'}</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-black text-gray-900">
+                {editingSponsor
+                  ? (isRtl ? 'تعديل بيانات الراعي' : 'Edit Sponsor')
+                  : (isRtl ? 'تسجيل راعي أو داعم' : 'Add Sponsor')}
+              </h3>
+              <button
+                type="button"
+                onClick={() => { setShowAddSponsorModal(false); setEditingSponsor(null); }}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-xl transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
             <form
+              key={editingSponsor ? editingSponsor.id : 'new-sponsor'}
               onSubmit={(e) => {
                 e.preventDefault();
                 const fd = new FormData(e.target);
-                handleAddSponsor({
-                  id: `sp-${Date.now()}`,
+                handleSaveSponsor({
+                  id: editingSponsor?.id,
                   sponsorName: fd.get('sponsorName'),
                   type: fd.get('type') || 'تبرع نقدي',
                   typeEn: 'Sponsor',
                   amount: Number(fd.get('amount')) || 1000000,
                   currency: 'ريال يمني',
-                  status: 'confirmed',
+                  status: editingSponsor?.status || 'confirmed',
                   contact: fd.get('contact') || '',
                   notes: fd.get('notes') || ''
                 });
@@ -1872,12 +2090,12 @@ export default function MassWeddingDashboard({
             >
               <div>
                 <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'اسم الداعم أو المؤسسة' : 'Sponsor Name'}</label>
-                <input type="text" name="sponsorName" required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                <input type="text" name="sponsorName" defaultValue={editingSponsor?.sponsorName || ''} required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'نوع المساهمة' : 'Type'}</label>
-                  <select name="type" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold">
+                  <select name="type" defaultValue={editingSponsor?.type || 'تبرع نقدي'} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold">
                     <option value="رعاية ماسية">{isRtl ? 'رعاية ماسية' : 'Diamond'}</option>
                     <option value="رعاية ذهبية">{isRtl ? 'رعاية ذهبية' : 'Gold'}</option>
                     <option value="تبرع نقدي">{isRtl ? 'تبرع نقدي' : 'Cash'}</option>
@@ -1886,54 +2104,74 @@ export default function MassWeddingDashboard({
                 </div>
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'المبلغ أو القيمة (ر.ي)' : 'Amount (YER)'}</label>
-                  <input type="number" name="amount" min="1000" step="50000" required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                  <input type="number" name="amount" defaultValue={editingSponsor?.amount || ''} min="1000" step="50000" required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
                 </div>
               </div>
               <div>
                 <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'شخص الاتصال / المنسق' : 'Contact Person'}</label>
-                <input type="text" name="contact" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5" />
+                <input type="text" name="contact" defaultValue={editingSponsor?.contact || ''} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5" />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'ملاحظات' : 'Notes'}</label>
+                <input type="text" name="notes" defaultValue={editingSponsor?.notes || ''} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5" />
               </div>
               <div className="flex gap-2 pt-2">
-                <button type="button" onClick={() => setShowAddSponsorModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 font-bold">{isRtl ? 'إلغاء' : 'Cancel'}</button>
-                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white font-bold">{isRtl ? 'حفظ الراعي' : 'Save'}</button>
+                <button type="button" onClick={() => { setShowAddSponsorModal(false); setEditingSponsor(null); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 font-bold">{isRtl ? 'إلغاء' : 'Cancel'}</button>
+                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition">
+                  {editingSponsor ? (isRtl ? 'حفظ التعديلات ✓' : 'Save Changes') : (isRtl ? 'حفظ الراعي' : 'Save')}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Modal 4: Add Expense */}
+      {/* Modal 4: Add / Edit Expense */}
       {showAddExpenseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-100 space-y-4">
-            <h3 className="text-lg font-black text-gray-900">{isRtl ? 'إضافة بند مصروفات' : 'Add Expense'}</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-black text-gray-900">
+                {editingExpense
+                  ? (isRtl ? 'تعديل بند المصروف' : 'Edit Expense')
+                  : (isRtl ? 'إضافة بند مصروفات' : 'Add Expense')}
+              </h3>
+              <button
+                type="button"
+                onClick={() => { setShowAddExpenseModal(false); setEditingExpense(null); }}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-xl transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
             <form
+              key={editingExpense ? editingExpense.id : 'new-expense'}
               onSubmit={(e) => {
                 e.preventDefault();
                 const fd = new FormData(e.target);
-                handleAddExpense({
-                  id: `exp-${Date.now()}`,
+                handleSaveExpense({
+                  id: editingExpense?.id,
                   item: fd.get('item'),
                   itemEn: fd.get('item'),
                   amount: Number(fd.get('amount')) || 100000,
                   category: fd.get('category') || 'general',
-                  status: 'approved'
+                  status: editingExpense?.status || 'approved'
                 });
               }}
               className="space-y-3 text-xs"
             >
               <div>
                 <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'اسم بند المصروف' : 'Item'}</label>
-                <input type="text" name="item" required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                <input type="text" name="item" defaultValue={editingExpense?.item || ''} required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'المبلغ (ر.ي)' : 'Amount'}</label>
-                  <input type="number" name="amount" min="1000" step="10000" required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                  <input type="number" name="amount" defaultValue={editingExpense?.amount || ''} min="1000" step="10000" required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
                 </div>
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'الفئة' : 'Category'}</label>
-                  <select name="category" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold">
+                  <select name="category" defaultValue={editingExpense?.category || 'banquet'} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold">
                     <option value="banquet">{isRtl ? 'الوليمة والذبائح' : 'Banquet'}</option>
                     <option value="tea">{isRtl ? 'الشاهي والسقيا' : 'Tea & Water'}</option>
                     <option value="venue">{isRtl ? 'الساحة والمخادر' : 'Venue'}</option>
@@ -1943,8 +2181,74 @@ export default function MassWeddingDashboard({
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
-                <button type="button" onClick={() => setShowAddExpenseModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 font-bold">{isRtl ? 'إلغاء' : 'Cancel'}</button>
-                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-rose-600 text-white font-bold">{isRtl ? 'حفظ المصروف' : 'Save'}</button>
+                <button type="button" onClick={() => { setShowAddExpenseModal(false); setEditingExpense(null); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 font-bold">{isRtl ? 'إلغاء' : 'Cancel'}</button>
+                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold transition">
+                  {editingExpense ? (isRtl ? 'حفظ التعديلات ✓' : 'Save Changes') : (isRtl ? 'حفظ المصروف' : 'Save')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 4b: Add / Edit Schedule Event */}
+      {showScheduleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-100 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-black text-gray-900">
+                {editingScheduleItem
+                  ? (isRtl ? 'تعديل الفعالية / المرحلة' : 'Edit Schedule Event')
+                  : (isRtl ? 'إضافة فعالية / مرحلة جديدة' : 'Add Schedule Event')}
+              </h3>
+              <button
+                type="button"
+                onClick={() => { setShowScheduleModal(false); setEditingScheduleItem(null); }}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-xl transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form
+              key={editingScheduleItem ? editingScheduleItem.id : 'new-schedule'}
+              onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.target);
+                handleSaveSchedule({
+                  id: editingScheduleItem?.id,
+                  time: fd.get('time'),
+                  title: fd.get('title'),
+                  titleEn: fd.get('title'),
+                  location: fd.get('location'),
+                  coordinator: fd.get('coordinator'),
+                  status: editingScheduleItem?.status || 'upcoming'
+                });
+              }}
+              className="space-y-3 text-xs"
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'الوقت / الموعد' : 'Time'}</label>
+                  <input type="text" name="time" defaultValue={editingScheduleItem?.time || ''} placeholder="04:00 عصراً" required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'اللجنة المنسقة' : 'Coordinator'}</label>
+                  <input type="text" name="coordinator" defaultValue={editingScheduleItem?.coordinator || ''} placeholder={isRtl ? 'لجنة الاستقبال...' : 'Coordinator...'} required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                </div>
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'عنوان الفعالية أو المرحلة' : 'Event Title'}</label>
+                <input type="text" name="title" defaultValue={editingScheduleItem?.title || ''} placeholder={isRtl ? 'عقد القران ومراسم الزفاف' : 'Event Title'} required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'المكان / الساحة' : 'Location'}</label>
+                <input type="text" name="location" defaultValue={editingScheduleItem?.location || ''} placeholder={isRtl ? 'ساحة الجامع الكبير' : 'Location'} required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => { setShowScheduleModal(false); setEditingScheduleItem(null); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 font-bold">{isRtl ? 'إلغاء' : 'Cancel'}</button>
+                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition">
+                  {editingScheduleItem ? (isRtl ? 'حفظ التعديلات ✓' : 'Save Changes') : (isRtl ? 'حفظ الفعالية' : 'Save')}
+                </button>
               </div>
             </form>
           </div>
