@@ -104,12 +104,12 @@ export default function MassWeddingDashboard({
 
   const logistics = useMemo(() => {
     return calculateMassWeddingLogistics(
-      couples.length || weddingInfo.targetCouples || 20,
-      null,
+      couples,
+      weddingInfo,
       calculatorRates,
       customItems
     );
-  }, [couples.length, weddingInfo.targetCouples, calculatorRates, customItems]);
+  }, [couples, weddingInfo, calculatorRates, customItems]);
 
   // Overall Readiness Score
   const readinessScore = useMemo(() => {
@@ -696,7 +696,12 @@ export default function MassWeddingDashboard({
                 </div>
 
                 <div className="space-y-3">
-                  {schedule.slice(0, 4).map((item) => (
+                  {schedule.length === 0 ? (
+                    <div className="p-6 rounded-2xl bg-gray-50 border border-dashed border-gray-200 text-center text-gray-400">
+                      <p className="text-xs font-semibold">{isRtl ? 'لا توجد فعاليات مجدولة حتى الآن' : 'No schedule items yet'}</p>
+                    </div>
+                  ) : (
+                    schedule.slice(0, 4).map((item) => (
                     <div
                       key={item.id}
                       className="p-3 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-between gap-3 text-xs"
@@ -730,7 +735,8 @@ export default function MassWeddingDashboard({
                             : isRtl ? 'قادم' : 'Upcoming'}
                       </span>
                     </div>
-                  ))}
+                  ))
+                  )}
                 </div>
               </div>
 
@@ -984,9 +990,32 @@ export default function MassWeddingDashboard({
           </div>
 
           {filteredCouples.length === 0 && (
-            <div className="bg-white p-12 rounded-3xl border border-gray-200 text-center text-gray-500 space-y-3">
-              <Users2 size={40} className="mx-auto text-gray-300" />
-              <p className="font-bold">{isRtl ? 'لم يتم العثور على عرسان مطابقين للبحث' : 'No couples matched your search'}</p>
+            <div className="bg-white p-12 rounded-3xl border border-dashed border-gray-300 text-center text-gray-500 space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+                <Users2 size={32} />
+              </div>
+              <div className="space-y-1">
+                <h4 className="font-bold text-gray-800 text-base">
+                  {couples.length === 0
+                    ? (isRtl ? 'لم يتم تسجيل أي عرسان بعد في السجل' : 'No couples registered yet')
+                    : (isRtl ? 'لم يتم العثور على عرسان مطابقين للبحث' : 'No couples matched your search')}
+                </h4>
+                <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                  {couples.length === 0
+                    ? (isRtl ? 'ابدأ بإضافة العرسان ومتابعة فحوصاتهم الطبية وعقودهم الشرعية وكوتة بطاقات الدعوة.' : 'Start adding couples to track their medical checks, contracts, and invitation quotas.')
+                    : (isRtl ? 'جرب البحث بكلمات أخرى أو أعد ضبط تصنيف التصفية.' : 'Try different search keywords or reset filter.')}
+                </p>
+              </div>
+              {couples.length === 0 && (
+                <button
+                  type="button"
+                  onClick={() => { setEditingCouple(null); setShowAddCoupleModal(true); }}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs sm:text-sm shadow-md transition"
+                >
+                  <Plus size={16} />
+                  <span>{isRtl ? 'تسجيل أول عريس في السجل' : 'Register First Couple'}</span>
+                </button>
+              )}
             </div>
           )}
 
@@ -1017,7 +1046,30 @@ export default function MassWeddingDashboard({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {committees.length === 0 ? (
+            <div className="bg-white p-12 rounded-3xl border border-dashed border-gray-300 text-center text-gray-500 space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+                <HeartHandshake size={32} />
+              </div>
+              <div className="space-y-1">
+                <h4 className="font-bold text-gray-800 text-base">
+                  {isRtl ? 'لا توجد لجان ميدانية مسجلة حتى الآن' : 'No committees registered yet'}
+                </h4>
+                <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                  {isRtl ? 'أنشئ فرق العمل (كاللجنة الإعلامية، لجنة الضيافة والوليمة، ولجنة الاستقبال) لتوزيع المتطوعين والمهام.' : 'Create working teams to assign responsibilities, leads, and volunteers.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setEditingCommittee(null); setShowAddCommitteeModal(true); }}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs sm:text-sm shadow-md transition"
+              >
+                <Plus size={16} />
+                <span>{isRtl ? 'إضافة أول لجنة تنظيمية' : 'Add First Committee'}</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {committees.map((com) => (
               <div
                 key={com.id}
@@ -1088,6 +1140,7 @@ export default function MassWeddingDashboard({
               </div>
             ))}
           </div>
+          )}
 
         </div>
       )}
@@ -1122,7 +1175,19 @@ export default function MassWeddingDashboard({
               </div>
 
               <div className="space-y-3">
-                {sponsorships.map((sp) => (
+                {sponsorships.length === 0 ? (
+                  <div className="p-8 rounded-2xl bg-gray-50 border border-dashed border-gray-200 text-center text-gray-400 space-y-2">
+                    <p className="text-xs font-semibold">{isRtl ? 'لا يوجد رعاة أو مساهمات مسجلة حالياً' : 'No sponsors or contributions recorded yet'}</p>
+                    <button
+                      type="button"
+                      onClick={() => { setEditingSponsor(null); setShowAddSponsorModal(true); }}
+                      className="text-xs text-emerald-700 font-bold hover:underline"
+                    >
+                      {isRtl ? '+ تسجيل راعي أو داعم' : '+ Add Sponsor'}
+                    </button>
+                  </div>
+                ) : (
+                  sponsorships.map((sp) => (
                   <div
                     key={sp.id}
                     className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-between gap-3 text-xs"
@@ -1162,7 +1227,8 @@ export default function MassWeddingDashboard({
                       </div>
                     </div>
                   </div>
-                ))}
+                ))
+                )}
               </div>
             </div>
 
@@ -1190,7 +1256,19 @@ export default function MassWeddingDashboard({
               </div>
 
               <div className="space-y-3">
-                {expenses.map((exp) => (
+                {expenses.length === 0 ? (
+                  <div className="p-8 rounded-2xl bg-gray-50 border border-dashed border-gray-200 text-center text-gray-400 space-y-2">
+                    <p className="text-xs font-semibold">{isRtl ? 'لا توجد بنود مصروفات مسجلة حالياً' : 'No cost items recorded yet'}</p>
+                    <button
+                      type="button"
+                      onClick={() => { setEditingExpense(null); setShowAddExpenseModal(true); }}
+                      className="text-xs text-rose-700 font-bold hover:underline"
+                    >
+                      {isRtl ? '+ إضافة بند مصروفات' : '+ Add Expense'}
+                    </button>
+                  </div>
+                ) : (
+                  expenses.map((exp) => (
                   <div
                     key={exp.id}
                     className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-between gap-3 text-xs"
@@ -1224,7 +1302,8 @@ export default function MassWeddingDashboard({
                       </div>
                     </div>
                   </div>
-                ))}
+                ))
+                )}
               </div>
             </div>
 
@@ -1256,7 +1335,20 @@ export default function MassWeddingDashboard({
             </button>
           </div>
 
-          <div className="relative border-s-2 border-amber-200 ms-4 space-y-6">
+          {schedule.length === 0 ? (
+            <div className="p-10 rounded-2xl bg-gray-50 border border-dashed border-gray-200 text-center text-gray-400 space-y-3">
+              <Calendar size={36} className="mx-auto text-gray-300" />
+              <p className="text-xs font-semibold">{isRtl ? 'لم تتم جدولة أي فعاليات مشتركة بعد' : 'No timeline events scheduled yet'}</p>
+              <button
+                type="button"
+                onClick={() => { setEditingScheduleItem(null); setShowScheduleModal(true); }}
+                className="text-xs text-amber-700 font-bold hover:underline"
+              >
+                {isRtl ? '+ إضافة أول فعالية في الجدول' : '+ Add First Event'}
+              </button>
+            </div>
+          ) : (
+            <div className="relative border-s-2 border-amber-200 ms-4 space-y-6">
             {schedule.map((item, idx) => (
               <div key={item.id} className="relative ms-6 space-y-1">
                 <span
@@ -1329,6 +1421,7 @@ export default function MassWeddingDashboard({
               </div>
             ))}
           </div>
+          )}
 
         </div>
       )}
@@ -1745,13 +1838,20 @@ export default function MassWeddingDashboard({
                           : isRtl ? 'كمية مقطوعة ثابتة' : 'Fixed quantity'}
                       </div>
                       <div className="font-black text-sm sm:text-base text-gray-900 bg-white px-2.5 py-1 rounded-xl border border-gray-200 shadow-2xs">
-                        <span className="text-amber-700">{item.computedQuantity}</span>{' '}
+                        <span className="text-amber-700">{item.computedQuantity !== null && item.computedQuantity > 0 ? item.computedQuantity : '—'}</span>{' '}
                         <span className="text-xs text-gray-600 font-bold">{item.unit}</span>
                       </div>
                     </div>
                   </div>
                 );
               })}
+
+              {logistics.customSupplies.length === 0 && (
+                <div className="sm:col-span-2 lg:col-span-2 p-6 rounded-2xl bg-amber-50/40 border border-dashed border-amber-200/80 flex flex-col justify-center items-center text-center">
+                  <p className="text-xs font-bold text-amber-900 mb-0.5">{isRtl ? 'لا توجد مواد مخصصة مضافة بعد' : 'No custom provisions added yet'}</p>
+                  <p className="text-[11px] text-gray-500">{isRtl ? 'أضف المواد التي تهمك لحساب نسبها وكمياتها المحددة تلقائياً' : 'Add custom materials to specify ratios or fixed amounts'}</p>
+                </div>
+              )}
 
               {/* Dotted Quick Add Box */}
               <button

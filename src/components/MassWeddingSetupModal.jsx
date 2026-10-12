@@ -1,21 +1,21 @@
 import React, { useState } from 'react';
-import { Users2, Calendar, MapPin, Building2, Coins, FileText, X } from 'lucide-react';
+import { Users2, Calendar, MapPin, Building2, Coins, FileText, X, Trash2 } from 'lucide-react';
 
-export default function MassWeddingSetupModal({ initialData, onSave, onCancel, isRtl }) {
+export default function MassWeddingSetupModal({ initialData, onSave, onCancel, onDeleteWedding, isRtl }) {
   const [formData, setFormData] = useState({
-    title: initialData?.title || 'العرس الجماعي الخيري العاشر',
-    titleEn: initialData?.titleEn || '10th Community Charitable Mass Wedding',
-    organizer: initialData?.organizer || 'لجنة تيسير الزواج والعمل الخيري',
-    organizerEn: initialData?.organizerEn || 'Marriage Facilitation & Charity Committee',
-    city: initialData?.city || 'حضرموت',
-    cityEn: initialData?.cityEn || 'Hadhramaut',
-    location: initialData?.location || 'ساحة قصر الرند - تريم',
-    locationEn: initialData?.locationEn || 'Al-Rund Palace Grounds - Tarim',
-    date: initialData?.date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    targetCouples: initialData?.targetCouples || 24,
-    estimatedTotalBudget: initialData?.estimatedTotalBudget || 18000000,
-    guestQuotaPerCouple: initialData?.guestQuotaPerCouple || 35,
-    notes: initialData?.notes || 'زواج جماعي تيسيراً للشباب وحفظاً للأعراف والتقاليد الأصيلة.'
+    title: initialData?.title || '',
+    titleEn: initialData?.titleEn || '',
+    organizer: initialData?.organizer || '',
+    organizerEn: initialData?.organizerEn || '',
+    city: initialData?.city || '',
+    cityEn: initialData?.cityEn || '',
+    location: initialData?.location || '',
+    locationEn: initialData?.locationEn || '',
+    date: initialData?.date || '',
+    targetCouples: initialData?.targetCouples !== undefined ? initialData.targetCouples : '',
+    estimatedTotalBudget: initialData?.estimatedTotalBudget !== undefined ? initialData.estimatedTotalBudget : '',
+    guestQuotaPerCouple: initialData?.guestQuotaPerCouple !== undefined ? initialData.guestQuotaPerCouple : '',
+    notes: initialData?.notes || ''
   });
 
   const handleChange = (e) => {
@@ -195,22 +195,36 @@ export default function MassWeddingSetupModal({ initialData, onSave, onCancel, i
             />
           </div>
 
-          <div className="flex gap-3 pt-3">
-            {onCancel && (
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-gray-100">
+            {onDeleteWedding && (
               <button
                 type="button"
-                onClick={onCancel}
-                className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-100 transition"
+                onClick={onDeleteWedding}
+                className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-3.5 py-2.5 rounded-xl transition text-xs font-bold flex items-center justify-center gap-1.5"
+                title={isRtl ? 'حذف ملف هذا العرس الجماعي والبدء من جديد' : 'Reset & Create New'}
               >
-                {isRtl ? 'إلغاء' : 'Cancel'}
+                <Trash2 size={14} />
+                <span>{isRtl ? 'حذف ملف الفعالية وإنشاء جديد' : 'Reset & Create New'}</span>
               </button>
             )}
-            <button
-              type="submit"
-              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-sm shadow-lg shadow-amber-200 transition"
-            >
-              {isRtl ? 'حفظ والبدء بالتخطيط 🚀' : 'Save & Start Planning 🚀'}
-            </button>
+
+            <div className="flex items-center gap-2">
+              {onCancel && (
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-bold text-xs hover:bg-gray-100 transition"
+                >
+                  {isRtl ? 'إلغاء' : 'Cancel'}
+                </button>
+              )}
+              <button
+                type="submit"
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-xs shadow-md shadow-amber-200 transition"
+              >
+                {isRtl ? 'حفظ التعديلات ✓' : 'Save Changes ✓'}
+              </button>
+            </div>
           </div>
 
         </form>

@@ -16,6 +16,7 @@ import { SERVICE_CATEGORIES, SERVICE_TEMPLATES, createWhatsAppInquiryLink } from
 import WeddingModeSelector from './components/WeddingModeSelector';
 import MassWeddingDashboard from './components/MassWeddingDashboard';
 import MassWeddingSetupModal from './components/MassWeddingSetupModal';
+import MassWeddingSetupScreen from './components/MassWeddingSetupScreen';
 import { DEFAULT_MASS_WEDDING_DATA } from './data/massWeddingTemplates';
 
 // --- Dictionary for Bilingual Support ---
@@ -477,7 +478,6 @@ export default function App() {
       setIsSetupComplete(false);
     }
 
-    if (data.weddingMode) setWeddingMode(data.weddingMode);
     if (data.massWeddingData) setMassWeddingData(data.massWeddingData);
     if (data.guests) setGuests(data.guests);
     if (data.expenses) setExpenses(data.expenses);
@@ -602,6 +602,61 @@ export default function App() {
   const handleUpdateMassWeddingData = async (newMassData) => {
     setMassWeddingData(newMassData);
     await saveUserField('massWeddingData', newMassData);
+  };
+
+  const handleDeleteIndividualWedding = async () => {
+    const confirmMsg = isRtl
+      ? "هل أنت متأكد من رغبتك في حذف ملف هذا الزواج الفردي بالكامل؟ سيتم مسح بيانات العروسين والميزانية لتتمكن من إنشاء ملف زفاف جديد."
+      : "Are you sure you want to delete this individual wedding file? Groom, bride, and budget will be cleared to start anew.";
+    if (!window.confirm(confirmMsg)) return;
+
+    const clearedCouple = { groom: "", bride: "", date: "", initialBudget: "" };
+    setCouple(clearedCouple);
+    setIsSetupComplete(false);
+    setShowEditWeddingModal(false);
+    setWeddingMode(null);
+
+    const patch = {
+      setup: clearedCouple,
+      isSetupComplete: false,
+      weddingMode: null
+    };
+
+    if (user) {
+      updateLocalCache(user.uid, patch);
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+        await setDoc(userDocRef, patch, { merge: true });
+      } catch (err) {
+        console.error("Error clearing individual wedding:", err);
+      }
+    }
+  };
+
+  const handleDeleteMassWedding = async () => {
+    const confirmMsg = isRtl
+      ? "هل أنت متأكد من رغبتك في حذف ملف هذا العرس الجماعي بالكامل؟ سيتم مسح بيانات الفعالية واللجان والعرسان للبدء في تنظيم عرس جديد."
+      : "Are you sure you want to delete this mass wedding file? All event details, committees, and couples will be cleared to start anew.";
+    if (!window.confirm(confirmMsg)) return;
+
+    setMassWeddingData(DEFAULT_MASS_WEDDING_DATA);
+    setShowMassSetupModal(false);
+    setWeddingMode(null);
+
+    const patch = {
+      massWeddingData: DEFAULT_MASS_WEDDING_DATA,
+      weddingMode: null
+    };
+
+    if (user) {
+      updateLocalCache(user.uid, patch);
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+        await setDoc(userDocRef, patch, { merge: true });
+      } catch (err) {
+        console.error("Error clearing mass wedding:", err);
+      }
+    }
   };
 
   const handleDeleteGuest = async (guestId) => {
@@ -1829,7 +1884,20 @@ export default function App() {
     );
   }
 
-  // Setup check (فقط إذا كان وضع فردي ولم تكتمل بيانات العروسين)
+  // 1. Wedding Mode Selector check (إذا لم يتم اختيار نوع الزواج بعد)
+  if (!weddingMode) {
+    return (
+      <div dir={isRtl ? 'rtl' : 'ltr'} className={`min-h-screen bg-gradient-to-b from-[#fdfbf7] via-amber-50/40 to-[#fdfbf7] flex items-center justify-center p-4 sm:p-6 lg:p-8 font-sans ${isRtl ? 'font-arabic' : ''}`}>
+        <WeddingModeSelector
+          onSelectMode={handleSelectMode}
+          currentMode={weddingMode}
+          isRtl={isRtl}
+        />
+      </div>
+    );
+  }
+
+  // 2. Setup check (فقط إذا كان وضع فردي ولم تكتمل بيانات العروسين)
   if (weddingMode === 'individual' && !isSetupComplete) {
     return (
       <div dir={isRtl ? 'rtl' : 'ltr'} className={`min-h-screen bg-amber-50 flex items-center justify-center p-4 font-sans ${isRtl ? 'font-arabic' : ''}`}>
@@ -1865,10 +1933,10 @@ export default function App() {
           <div className="mt-6 flex items-center justify-between text-xs text-gray-500">
             <button
               type="button"
-              onClick={() => handleSelectMode('mass')}
+              onClick={() => handleSelectMode(null)}
               className="text-amber-700 hover:text-amber-800 font-bold hover:underline"
             >
-              {isRtl ? '← العودة لوضع العرس الجماعي' : '← Switch to Mass Wedding'}
+              {isRtl ? '← العودة لاختيار نوع الزواج' : '← Change Wedding Mode'}
             </button>
             <button
               type="button"
@@ -1880,6 +1948,21 @@ export default function App() {
           </div>
         </div>
       </div>
+    );
+  }
+
+  // 3. Setup check (إذا كان وضع عرس جماعي ولم يتم إعداد الفعالية بعد)
+  if (weddingMode === 'mass' && !massWeddingData?.info?.isConfigured) {
+    return (
+      <MassWeddingSetupScreen
+        initialData={massWeddingData?.info}
+        onSave={handleSaveMassWeddingSetup}
+        onSwitchToIndividual={() => handleSelectMode('individual')}
+        onSwitchMode={() => handleSelectMode(null)}
+        isRtl={isRtl}
+        lang={lang}
+        onToggleLang={toggleLang}
+      />
     );
   }
 
@@ -2150,15 +2233,7 @@ export default function App() {
 
       {/* Main Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {!weddingMode ? (
-          <main className="w-full pb-12">
-            <WeddingModeSelector
-              onSelectMode={handleSelectMode}
-              currentMode={weddingMode}
-              isRtl={isRtl}
-            />
-          </main>
-        ) : weddingMode === 'mass' ? (
+        {weddingMode === 'mass' ? (
           <div className="flex gap-6 lg:gap-8">
             {/* Mass Wedding Desktop Sidebar */}
             <aside className="hidden md:block w-64 shrink-0">
@@ -2915,20 +2990,32 @@ export default function App() {
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 mt-4">
+              <div className="flex items-center justify-between gap-2 pt-3 border-t border-gray-100 mt-4">
                 <button
                   type="button"
-                  onClick={() => setShowEditWeddingModal(false)}
-                  className="px-4 py-2 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition text-xs"
+                  onClick={handleDeleteIndividualWedding}
+                  className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1.5 rounded-xl transition text-xs font-bold flex items-center gap-1.5"
+                  title={isRtl ? 'حذف ملف هذا الزواج والبدء من جديد' : 'Reset & Create New'}
                 >
-                  {t.cancel}
+                  <Trash2 size={14} />
+                  <span>{isRtl ? 'حذف ملف الزواج وإنشاء جديد' : 'Reset & Create New'}</span>
                 </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition text-xs shadow-md"
-                >
-                  {isRtl ? 'حفظ التعديلات ✓' : 'Save Changes'}
-                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditWeddingModal(false)}
+                    className="px-4 py-2 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition text-xs"
+                  >
+                    {t.cancel}
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition text-xs shadow-md"
+                  >
+                    {isRtl ? 'حفظ التعديلات ✓' : 'Save Changes'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -2950,6 +3037,7 @@ export default function App() {
           initialData={massWeddingData.info}
           onSave={handleSaveMassWeddingSetup}
           onCancel={() => setShowMassSetupModal(false)}
+          onDeleteWedding={handleDeleteMassWedding}
           isRtl={isRtl}
         />
       )}
