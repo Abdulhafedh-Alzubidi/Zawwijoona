@@ -355,8 +355,8 @@ export default function App() {
         bio: ''
       });
 
-      // مهم جداً: إذا في شي ينحفظ في الlocalStorage لازم امسحه هنا عشان ما يعلق بيانات الحساب القديم
-      localStorage.clear();
+      // مسح حالة الجلسة دون مسح ذاكرة التخزين المحلية للحساب
+      sessionStorage.clear();
 
     } catch (error) {
       console.error("Error signing out:", error);
@@ -403,27 +403,6 @@ export default function App() {
     setProfileInfo((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleProfileSave = async () => {
-    console.log("1. تم الضغط على زر الحفظ!"); // إذا ما طلعت هذي، يعني الزر مفصول
-
-    if (user) {
-      console.log("2. المستخدم موجود، جاري الحفظ في فايربيس...");
-      try {
-        const userDocRef = doc(db, 'users', user.uid);
-        await setDoc(userDocRef, {
-          profile: profileInfo
-        }, { merge: true });
-
-        console.log("3. تم الحفظ في فايربيس بنجاح! 👤", profileInfo);
-        setIsProfileEditMode(false);
-
-      } catch (error) {
-        console.error("خطأ في حفظ بيانات الحساب:", error);
-      }
-    } else {
-      console.log("❌ خطأ: المتغير user غير موجود أو لم يتم تسجيل الدخول!");
-    }
-  };
   // 1. ALL HOOKS DECLARED AT THE TOP LEVEL
   const [lang, setLang] = useState('ar');
   const [weddingMode, setWeddingMode] = useState(null); // 'individual' | 'mass' | null
@@ -431,11 +410,13 @@ export default function App() {
   const [showModeSelectorModal, setShowModeSelectorModal] = useState(false);
   const [showMassSetupModal, setShowMassSetupModal] = useState(false);
   const [isSetupComplete, setIsSetupComplete] = useState(false);
+  const [showEditWeddingModal, setShowEditWeddingModal] = useState(false);
+  const [firestorePermissionError, setFirestorePermissionError] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [massActiveTab, setMassActiveTab] = useState('overview');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const [couple, setCouple] = useState({ groom: "", bride: "", date: "", initialBudget: "", });
+  const [couple, setCouple] = useState({ groom: "", bride: "", date: "", initialBudget: "" });
   const [events, setEvents] = useState([
     { id: 'contract', titleKey: 'contract', title: "", date: "", location: "", notes: "", completed: false },
     { id: 'henna', titleKey: 'henna', title: "", date: "", location: "", notes: "", completed: false },
@@ -459,85 +440,144 @@ export default function App() {
   const [activePhotoGallery, setActivePhotoGallery] = useState(null);
   const [showAddCustomServiceModal, setShowAddCustomServiceModal] = useState(false);
 
-  // --- كود الاسترجاع العظيم (Fetch Data) ---
+  // --- دوال التخزين المحلي الآمن لضمان عدم اختفاء البيانات ---
+  const getCacheKey = (uid) => `zawwijoona_wedding_cache_${uid}`;
+
+  const loadLocalCache = (uid) => {
+    try {
+      const cached = localStorage.getItem(getCacheKey(uid));
+      return cached ? JSON.parse(cached) : null;
+    } catch (e) {
+      console.warn("فشل قراءة النسخة الاحتياطية المحلية:", e);
+      return null;
+    }
+  };
+
+  const updateLocalCache = (uid, patch) => {
+    try {
+      const existing = loadLocalCache(uid) || {};
+      const updated = { ...existing, ...patch, lastSavedAt: new Date().toISOString() };
+      localStorage.setItem(getCacheKey(uid), JSON.stringify(updated));
+      return updated;
+    } catch (e) {
+      console.warn("فشل تحديث النسخة الاحتياطية المحلية:", e);
+    }
+  };
+
+  // --- دالة موحدة لتطبيق بيانات المستخدم على واجهة التطبيق ---
+  const applyUserData = (data) => {
+    if (!data) return;
+
+    if (data.setup) {
+      setCouple(data.setup);
+      setIsSetupComplete(true);
+    } else if (data.isSetupComplete) {
+      setIsSetupComplete(true);
+    } else {
+      setIsSetupComplete(false);
+    }
+
+    if (data.weddingMode) setWeddingMode(data.weddingMode);
+    if (data.massWeddingData) setMassWeddingData(data.massWeddingData);
+    if (data.guests) setGuests(data.guests);
+    if (data.expenses) setExpenses(data.expenses);
+    if (data.events) setEvents(data.events);
+    if (data.teams) setTeams(data.teams);
+    if (data.profile) setProfileInfo(data.profile);
+    if (data.bookedServices) setBookedServices(data.bookedServices);
+
+    let fetchedIncomes = data.incomes || [];
+    if (data.setup && data.setup.initialBudget) {
+      const hasInitialBudget = fetchedIncomes.some(inc => inc.type === 'شخصي' || inc.type === 'Personal');
+      if (!hasInitialBudget) {
+        fetchedIncomes = [
+          {
+            id: 'initial_budget_fixed',
+            source: lang === 'ar' ? 'الميزانية المبدئية' : 'Initial Budget',
+            type: lang === 'ar' ? 'شخصي' : 'Personal',
+            amount: data.setup.initialBudget
+          },
+          ...fetchedIncomes
+        ];
+      }
+    }
+    setIncomes(fetchedIncomes);
+  };
+
+  // --- دالة حفظ الحقول المشتركة مع مزامنة فورية محلياً وسحابياً ---
+  const saveUserField = async (field, value) => {
+    if (!user) return;
+    // 1. الحفظ المحلي الفوري (يضمن عدم ضياع أي تغيير إطلاقاً حتى لو حدث خطأ بالسيرفر)
+    updateLocalCache(user.uid, { [field]: value });
+
+    // 2. المحاولة مع فايربيس
+    try {
+      const userDocRef = doc(db, 'users', user.uid);
+      await setDoc(userDocRef, { [field]: value }, { merge: true });
+      setFirestorePermissionError(false);
+    } catch (error) {
+      console.error(`خطأ في حفظ ${field} في فايربيس:`, error);
+      if (error?.code === 'permission-denied') {
+        setFirestorePermissionError(true);
+      }
+    }
+  };
+
+  const handleProfileSave = async () => {
+    if (user) {
+      await saveUserField('profile', profileInfo);
+      setIsProfileEditMode(false);
+    }
+  };
+
+  // --- كود الاسترجاع العظيم (Fetch Data) مع حماية ضد فقدان البيانات ---
   useEffect(() => {
     const fetchUserData = async () => {
-      // إذا كان المستخدم مسجل دخوله، روح جيب بياناته
       if (user) {
+        // خطوة أ: قراءة النسخة المحلية فوراً لمنع وميض الواجهة أو فقدان البيانات
+        const cached = loadLocalCache(user.uid);
+        if (cached) {
+          applyUserData(cached);
+        }
+
+        // خطوة ب: استرجاع البيانات من Firebase ومزامنتها
         try {
           const userDocRef = doc(db, 'users', user.uid);
-          const docSnap = await getDoc(userDocRef); // سحب الملف بالكامل
+          const docSnap = await getDoc(userDocRef);
 
           if (docSnap.exists()) {
-            const data = docSnap.data(); // تفريغ محتوى الملف في متغير data
-
-            // 1. استرجاع بيانات العرسان وإخفاء شاشة الإعداد إذا كانت مكتملة
-            if (data.setup) {
-              setCouple(data.setup);
-              setIsSetupComplete(true);
-            } else {
-              setIsSetupComplete(false);
-            }
-
-            // 2. استرجاع باقي الأقسام (إن وُجدت)
-            if (data.weddingMode) setWeddingMode(data.weddingMode);
-            if (data.massWeddingData) setMassWeddingData(data.massWeddingData);
-            if (data.guests) setGuests(data.guests);
-            if (data.expenses) setExpenses(data.expenses);
-            if (data.events) setEvents(data.events);
-            if (data.teams) setTeams(data.teams);
-            if (data.profile) setProfileInfo(data.profile);
-            if (data.bookedServices) setBookedServices(data.bookedServices);
-
-            // --- 🌟 التعديل السحري للميزانية المبدئية 🌟 ---
-            // نجيب الموارد من الفايربيس (وإذا مافيه نخليها مصفوفة فاضية عشان نقدر نضيف عليها)
-            let fetchedIncomes = data.incomes || [];
-
-            // إذا كان المستخدم عنده ميزانية مبدئية مسجلة في الإعدادات
-            if (data.setup && data.setup.initialBudget) {
-              // نفحص: هل الميزانية المبدئية موجودة أصلاً داخل القائمة اللي جات من فايربيس؟
-              const hasInitialBudget = fetchedIncomes.some(inc => inc.type === 'شخصي' || inc.type === 'Personal');
-
-              // إذا مو موجودة (بسبب التحديث)، نزرعها غصب كأول عنصر!
-              if (!hasInitialBudget) {
-                fetchedIncomes = [
-                  {
-                    id: 'initial_budget_fixed', // آي دي ثابت عشان ما تتكرر
-                    source: isRtl ? 'الميزانية المبدئية' : 'Initial Budget',
-                    type: isRtl ? 'شخصي' : 'Personal',
-                    amount: data.setup.initialBudget // سحبنا الرقم من بيانات العريس
-                  },
-                  ...fetchedIncomes // ونحط تحتها باقي الموارد الإضافية
-                ];
+            const data = docSnap.data();
+            applyUserData(data);
+            updateLocalCache(user.uid, data);
+            setFirestorePermissionError(false);
+            console.log("تم استرجاع جميع البيانات بنجاح من فايربيس! 📥🎯", data);
+          } else {
+            console.log("المستخدم جديد على السيرفر.");
+            // إذا كان المستخدم جديد على السيرفر لكنه يملك بيانات محلياً (مثلاً فشل الحفظ سابقاً)، ارفعها الآن
+            if (cached) {
+              try {
+                await setDoc(userDocRef, cached, { merge: true });
+                setFirestorePermissionError(false);
+              } catch (err) {
+                if (err?.code === 'permission-denied') setFirestorePermissionError(true);
               }
             }
-
-            // أخيراً: نعتمد القائمة المدمجة ونرسلها للشاشة
-            setIncomes(fetchedIncomes);
-            // ----------------------------------------------
-
-            console.log("تم استرجاع جميع البيانات بنجاح! 📥🎯", data);
-          } else {
-            console.log("المستخدم جديد، لا توجد بيانات سابقة.");
           }
         } catch (error) {
-          console.error("خطأ في استرجاع البيانات:", error);
+          console.error("خطأ في استرجاع البيانات من فايربيس:", error);
+          if (error?.code === 'permission-denied') {
+            setFirestorePermissionError(true);
+          }
+          // التأكد من استمرار العمل بالنسخة المحلية في حالة حدوث خطأ بالسيرفر
+          if (cached) {
+            applyUserData(cached);
+          }
         }
       }
     };
 
     fetchUserData();
-  }, [user]); // هذا القوس يعني: "شغّل هذا الكود كلما تغيرت حالة المستخدم (تسجيل دخول/خروج)"
-
-  const saveUserField = async (field, value) => {
-    if (!user) return;
-    try {
-      const userDocRef = doc(db, 'users', user.uid);
-      await setDoc(userDocRef, { [field]: value }, { merge: true });
-    } catch (error) {
-      console.error(`خطأ في حفظ ${field} في فايربيس:`, error);
-    }
-  };
+  }, [user]);
 
   const handleSelectMode = async (mode) => {
     setWeddingMode(mode);
@@ -717,27 +757,38 @@ export default function App() {
       date: formData.get('date'),
       initialBudget: Number(formData.get('budget'))
     };
+    const initialIncomes = [{
+      id: Date.now(),
+      source: isRtl ? 'الميزانية المبدئية' : 'Initial Budget',
+      type: isRtl ? 'شخصي' : 'Personal',
+      amount: newCouple.initialBudget
+    }];
+
     setCouple(newCouple);
-    setIncomes([{ id: Date.now(), source: isRtl ? 'الميزانية المبدئية' : 'Initial Budget', type: isRtl ? 'شخصي' : 'Personal', amount: newCouple.initialBudget }]);
+    setIncomes(initialIncomes);
+    setWeddingMode('individual');
     setIsSetupComplete(true);
 
-    // 2. الحفظ في قاعدة البيانات (Firestore)
+    const setupPayload = {
+      setup: newCouple,
+      weddingMode: 'individual',
+      isSetupComplete: true,
+      incomes: initialIncomes,
+      updatedAt: new Date().toISOString()
+    };
+
     if (user) {
+      updateLocalCache(user.uid, setupPayload);
       try {
-        // إنشاء مرجع لملف المستخدم في مجلد 'users' باستخدام الـ UID الخاص به
         const userDocRef = doc(db, 'users', user.uid);
-
-        // حفظ البيانات في الملف (استخدمنا merge: true عشان ما يمسح البيانات القديمة لو كانت موجودة)
-        await setDoc(userDocRef, {
-          setup: newCouple,
-          isSetupComplete: true,
-          updatedAt: new Date().toISOString()
-        }, { merge: true });
-
+        await setDoc(userDocRef, setupPayload, { merge: true });
+        setFirestorePermissionError(false);
         console.log("تم حفظ بيانات الزفاف بنجاح في السيرفر!");
       } catch (error) {
-        console.error("خطأ في حفظ البيانات:", error);
-        // هنا ممكن تضيف تنبيه للمستخدم إن الحفظ فشل إذا حبيت
+        console.error("خطأ في حفظ البيانات في فايربيس:", error);
+        if (error?.code === 'permission-denied') {
+          setFirestorePermissionError(true);
+        }
       }
     }
   };
@@ -798,8 +849,19 @@ export default function App() {
             <p className="text-lg font-medium mb-4 text-amber-100">
               {lang === 'ar' ? 'بارك الله لكما وجمع بينكما في خير، بالتمام على خير إن شاء الله 💍' : 'May God bless you both and bring you together in goodness 💍'}
             </p>
-            <div className="inline-block bg-black/20 backdrop-blur-sm px-6 py-2 rounded-full text-sm font-bold tracking-widest">
-              {couple.date || 'TBD'}
+            <div className="mt-2 flex items-center justify-center gap-2 flex-wrap">
+              <div className="inline-block bg-black/20 backdrop-blur-sm px-6 py-2 rounded-full text-sm font-bold tracking-widest">
+                {couple.date || 'TBD'}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditWeddingModal(true)}
+                className="inline-flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3.5 py-2 rounded-full backdrop-blur-sm transition cursor-pointer shadow-sm"
+                title={isRtl ? 'تعديل بيانات العرسان والميزانية' : 'Edit Wedding Details'}
+              >
+                <Edit2 size={13} />
+                <span>{isRtl ? 'تعديل بيانات الزفاف' : 'Edit Details'}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1054,7 +1116,11 @@ export default function App() {
               status: 'pending'
             });
           }
-          setGuests(prev => [...prev, ...parsedGuests]);
+          setGuests(prev => {
+            const updated = [...prev, ...parsedGuests];
+            saveUserField('guests', updated);
+            return updated;
+          });
           // Clear the input so the same file can be selected again
           event.target.value = null;
         };
@@ -2060,6 +2126,28 @@ export default function App() {
           </div>
         )}
       </nav>
+
+      {/* تنبيه قواعد أمان فايربيس في حال رفض السيرفر */}
+      {firestorePermissionError && (
+        <div className="bg-amber-500/10 border-b border-amber-300 text-amber-900 px-4 py-2.5 text-xs sm:text-sm font-medium flex items-center justify-between gap-3 shadow-inner">
+          <div className="flex items-center gap-2 max-w-5xl">
+            <AlertCircle className="text-amber-600 shrink-0" size={18} />
+            <span>
+              {isRtl
+                ? 'ملاحظة مزامنة السيرفر: تم حفظ بياناتك محلياً على جهازك ولن تضيع! قاعدة بيانات Firebase ترفض الكتابة حالياً بسبب قيود قواعد الأمان (Missing or insufficient permissions). يُرجى تفعيل القواعد في Firebase Console.'
+                : 'Server Sync Notice: Your data is safely saved locally! Firebase is currently rejecting server writes due to security rules. Please update your Firestore Rules in Firebase Console.'}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFirestorePermissionError(false)}
+            className="text-amber-800 hover:text-black font-bold px-2 py-1 rounded bg-amber-200/50 hover:bg-amber-200 transition text-xs shrink-0"
+          >
+            {isRtl ? 'إغلاق' : 'Dismiss'}
+          </button>
+        </div>
+      )}
+
       {/* Main Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {!weddingMode ? (
@@ -2182,17 +2270,7 @@ export default function App() {
               setGuests(updatedGuests);
               setShowGuestModal(false);
               setEditingGuest(null);
-
-              if (user) {
-                try {
-                  const userDocRef = doc(db, 'users', user.uid);
-                  await setDoc(userDocRef, {
-                    guests: updatedGuests
-                  }, { merge: true });
-                } catch (error) {
-                  console.error("خطأ في حفظ الضيف:", error);
-                }
-              }
+              await saveUserField('guests', updatedGuests);
             }} className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.guestName}</label>
@@ -2248,17 +2326,7 @@ export default function App() {
               setExpenses(updatedExpenses);
               setShowExpenseModal(false);
               setEditingExpense(null);
-
-              if (user) {
-                try {
-                  const userDocRef = doc(db, 'users', user.uid);
-                  await setDoc(userDocRef, {
-                    expenses: updatedExpenses
-                  }, { merge: true });
-                } catch (error) {
-                  console.error("خطأ في حفظ المصروف:", error);
-                }
-              }
+              await saveUserField('expenses', updatedExpenses);
             }} className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.itemName}</label>
@@ -2306,17 +2374,7 @@ export default function App() {
               setIncomes(updatedIncomes);
               setShowIncomeModal(false);
               setEditingIncome(null);
-
-              if (user) {
-                try {
-                  const userDocRef = doc(db, 'users', user.uid);
-                  await setDoc(userDocRef, {
-                    incomes: updatedIncomes
-                  }, { merge: true });
-                } catch (error) {
-                  console.error("خطأ في حفظ المدخول:", error);
-                }
-              }
+              await saveUserField('incomes', updatedIncomes);
             }} className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.incomeSource}</label>
@@ -2371,17 +2429,7 @@ export default function App() {
               setEvents(updatedEvents);
               setShowEventModal(false);
               setEditingEvent(null);
-
-              if (user) {
-                try {
-                  const userDocRef = doc(db, 'users', user.uid);
-                  await setDoc(userDocRef, {
-                    events: updatedEvents
-                  }, { merge: true });
-                } catch (error) {
-                  console.error("خطأ في حفظ الخطة:", error);
-                }
-              }
+              await saveUserField('events', updatedEvents);
             }} className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.eventTitle}</label>
@@ -2439,17 +2487,7 @@ export default function App() {
               setTeams(updatedTeams);
               setShowTeamModal(false);
               setEditingTeam(null);
-
-              if (user) {
-                try {
-                  const userDocRef = doc(db, 'users', user.uid);
-                  await setDoc(userDocRef, {
-                    teams: updatedTeams
-                  }, { merge: true });
-                } catch (error) {
-                  console.error("خطأ في حفظ الفريق:", error);
-                }
-              }
+              await saveUserField('teams', updatedTeams);
             }} className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.teamName}</label>
@@ -2500,23 +2538,9 @@ export default function App() {
                 return team;
               });
 
-              // 3. تحديث الواجهة فوراً (حفظ محلي)
               setTeams(updatedTeams);
               setShowTeamMemberModal(null);
-
-              // 4. إرسال القائمة المحدثة إلى قاعدة البيانات (Firestore)
-              if (user) {
-                try {
-                  const userDocRef = doc(db, 'users', user.uid);
-                  // نحدث حقل الفرق بالكامل
-                  await setDoc(userDocRef, {
-                    teams: updatedTeams
-                  }, { merge: true });
-                  console.log("تم إضافة الفرد للفريق بنجاح! 👤");
-                } catch (error) {
-                  console.error("خطأ في حفظ الفرد:", error);
-                }
-              }
+              await saveUserField('teams', updatedTeams);
             }} className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.memberName}</label>
@@ -2776,6 +2800,134 @@ export default function App() {
                   className="px-6 py-2.5 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition text-sm shadow-md"
                 >
                   {t.save}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Wedding Modal for Individual Wedding */}
+      {showEditWeddingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 sm:p-7 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+              <div className="flex items-center gap-2">
+                <CalendarHeart size={22} className="text-amber-600" />
+                <h3 className="text-xl font-bold text-gray-900">
+                  {isRtl ? 'تعديل بيانات الزفاف' : 'Edit Wedding Details'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditWeddingModal(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 bg-gray-100 rounded-full transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const updatedCouple = {
+                  groom: formData.get('groom'),
+                  bride: formData.get('bride'),
+                  date: formData.get('date'),
+                  initialBudget: Number(formData.get('budget'))
+                };
+
+                setCouple(updatedCouple);
+
+                // Update incomes list with the new initial budget
+                let updatedIncomes = [...incomes];
+                const initialIndex = updatedIncomes.findIndex(
+                  inc => inc.id === 'initial_budget_fixed' || inc.type === 'شخصي' || inc.type === 'Personal'
+                );
+                if (initialIndex >= 0) {
+                  updatedIncomes[initialIndex] = {
+                    ...updatedIncomes[initialIndex],
+                    amount: updatedCouple.initialBudget
+                  };
+                } else {
+                  updatedIncomes.unshift({
+                    id: 'initial_budget_fixed',
+                    source: isRtl ? 'الميزانية المبدئية' : 'Initial Budget',
+                    type: isRtl ? 'شخصي' : 'Personal',
+                    amount: updatedCouple.initialBudget
+                  });
+                }
+
+                setIncomes(updatedIncomes);
+                setShowEditWeddingModal(false);
+
+                await saveUserField('setup', updatedCouple);
+                await saveUserField('incomes', updatedIncomes);
+              }}
+              className="space-y-4 text-sm"
+            >
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">{t.groomName}</label>
+                <input
+                  type="text"
+                  name="groom"
+                  defaultValue={couple.groom}
+                  required
+                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">{t.brideName}</label>
+                <input
+                  type="text"
+                  name="bride"
+                  defaultValue={couple.bride}
+                  required
+                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">{t.weddingDate}</label>
+                <input
+                  type="date"
+                  name="date"
+                  defaultValue={couple.date}
+                  min={todayStr}
+                  required
+                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  {t.initialBudget} ({t.currency})
+                </label>
+                <input
+                  type="number"
+                  name="budget"
+                  defaultValue={couple.initialBudget}
+                  required
+                  min="0"
+                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none font-bold"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowEditWeddingModal(false)}
+                  className="px-4 py-2 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition text-xs"
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition text-xs shadow-md"
+                >
+                  {isRtl ? 'حفظ التعديلات ✓' : 'Save Changes'}
                 </button>
               </div>
             </form>
