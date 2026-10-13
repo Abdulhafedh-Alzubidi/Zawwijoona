@@ -109,11 +109,25 @@ export default function MassWeddingDashboard({
     Math.round((totalSponsorships / (weddingInfo.estimatedTotalBudget || 1)) * 100)
   );
 
-  const completedCouplesCount = useMemo(() => {
-    return couples.filter(
-      (c) => c.medicalStatus === 'completed' && c.contractStatus === 'completed'
-    ).length;
+  const coupleStats = useMemo(() => {
+    let medicalReady = 0;
+    let contractsApproved = 0;
+    let fullyCompleted = 0;
+
+    for (let i = 0; i < couples.length; i++) {
+      const c = couples[i];
+      const isMedicalCompleted = c.medicalStatus === 'completed';
+      const isContractCompleted = c.contractStatus === 'completed';
+
+      if (isMedicalCompleted) medicalReady++;
+      if (isContractCompleted) contractsApproved++;
+      if (isMedicalCompleted && isContractCompleted) fullyCompleted++;
+    }
+
+    return { medicalReady, contractsApproved, fullyCompleted };
   }, [couples]);
+
+  const completedCouplesCount = coupleStats.fullyCompleted;
 
   const totalVolunteers = useMemo(() => {
     return committees.reduce((sum, com) => sum + (Number(com.volunteersCount) || 0), 0);
@@ -1102,11 +1116,11 @@ export default function MassWeddingDashboard({
               </span>
               <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
                 🩺 <span>{isRtl ? 'مكتمل الفحص الطبي:' : 'Medical Ready:'}</span>
-                <strong className="text-emerald-300 font-black">{couples.filter(c => c.medicalStatus === 'completed').length}</strong>
+                <strong className="text-emerald-300 font-black">{coupleStats.medicalReady}</strong>
               </span>
               <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
                 📜 <span>{isRtl ? 'معتمد عقد القران:' : 'Contracts Approved:'}</span>
-                <strong className="text-amber-200 font-black">{couples.filter(c => c.contractStatus === 'completed').length}</strong>
+                <strong className="text-amber-200 font-black">{coupleStats.contractsApproved}</strong>
               </span>
               <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
                 👥 <span>{isRtl ? 'معازيم العرسان المقدرين:' : 'Couples Guests:'}</span>
