@@ -21,6 +21,11 @@ import { DEFAULT_MASS_WEDDING_DATA } from './data/massWeddingTemplates';
 import CommitteePortalView from './components/CommitteePortalView';
 import { decodeCommitteePortalData } from './utils/portalHelpers';
 
+const serviceCategoriesMap = SERVICE_CATEGORIES.reduce((acc, cat) => {
+  acc[cat.id] = cat;
+  return acc;
+}, {});
+
 // --- Dictionary for Bilingual Support ---
 const dict = {
   ar: {
@@ -1584,8 +1589,8 @@ export default function App() {
                             {renderCatIcon(item.category, 14)}
                             <span>
                               {isRtl
-                                ? SERVICE_CATEGORIES.find((c) => c.id === item.category)?.labelAr
-                                : SERVICE_CATEGORIES.find((c) => c.id === item.category)?.labelEn}
+                                ? serviceCategoriesMap[item.category]?.labelAr
+                                : serviceCategoriesMap[item.category]?.labelEn}
                             </span>
                           </span>
 
@@ -1774,8 +1779,8 @@ export default function App() {
                                 {renderCatIcon(booking.category, 12)}
                                 <span>
                                   {isRtl
-                                    ? SERVICE_CATEGORIES.find((c) => c.id === booking.category)?.labelAr || booking.category
-                                    : SERVICE_CATEGORIES.find((c) => c.id === booking.category)?.labelEn || booking.category}
+                                    ? serviceCategoriesMap[booking.category]?.labelAr || booking.category
+                                    : serviceCategoriesMap[booking.category]?.labelEn || booking.category}
                                 </span>
                               </span>
 
