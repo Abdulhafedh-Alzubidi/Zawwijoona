@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate', // لتحديث التطبيق تلقائياً عند رفع كود جديد
+      registerType: 'autoUpdate',
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         clientsClaim: true,
@@ -17,9 +17,9 @@ export default defineConfig({
         name: 'تطبيق مراسيم - لتخطيط الزفاف والمناسبات',
         short_name: 'مراسيم',
         description: 'مساعدك الشخصي لتخطيط زفافك ومراسيمه بكل تفاصيله',
-        theme_color: '#d97706', // اللون العنابي/الذهبي الذي استخدمناه (amber-600)
+        theme_color: '#d97706',
         background_color: '#fdfbf7',
-        display: 'standalone', // هذه الكلمة هي التي تجعله يفتح كأنه تطبيق بدون متصفح
+        display: 'standalone',
         icons: [
           {
             src: '/icon-192x192.png',
@@ -35,5 +35,10 @@ export default defineConfig({
         ]
       }
     })
-  ]
+  ],
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./vitest.setup.js'],
+    globals: true
+  }
 })
