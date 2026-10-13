@@ -18,7 +18,11 @@ import {
   Award,
   ChevronDown,
   ChevronUp,
+  Download,
+  Printer,
+  FileImage,
 } from 'lucide-react';
+import { downloadDataUrlAsBlob } from '../utils/portalHelpers';
 
 export default function CommitteePortalView({
   committee,
@@ -85,6 +89,195 @@ export default function CommitteePortalView({
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2500);
     }
+  };
+
+  const handleSaveBadgeImage = () => {
+    if (!committee) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 600;
+    canvas.height = 800;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Dark sleek badge card background
+    const gradient = ctx.createLinearGradient(0, 0, 600, 800);
+    gradient.addColorStop(0, '#0f172a');
+    gradient.addColorStop(0.4, '#1e1b4b');
+    gradient.addColorStop(1, '#020617');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 600, 800);
+
+    // Golden frame border
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(20, 20, 560, 760);
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(28, 28, 544, 744);
+
+    // Top Header Banner
+    ctx.fillStyle = '#f59e0b';
+    ctx.font = 'bold 24px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(weddingTitle || 'العرس الجماعي الخيري', 300, 80);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '16px system-ui, -apple-system, sans-serif';
+    ctx.fillText(organizer || 'اللجنة العليا المنظمة', 300, 115);
+
+    // Decorative separator
+    ctx.strokeStyle = 'rgba(245, 158, 11, 0.4)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(100, 140);
+    ctx.lineTo(500, 140);
+    ctx.stroke();
+
+    // Badge Title Pill
+    ctx.fillStyle = 'rgba(16, 185, 129, 0.2)';
+    ctx.fillRect(180, 160, 240, 45);
+    ctx.strokeStyle = '#10b981';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(180, 160, 240, 45);
+
+    ctx.fillStyle = '#34d399';
+    ctx.font = 'bold 18px system-ui, -apple-system, sans-serif';
+    ctx.fillText('⭐ متطوع ميداني معتمد', 300, 190);
+
+    // Committee details
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '18px system-ui, -apple-system, sans-serif';
+    ctx.fillText('عضو رسمي في:', 300, 255);
+
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 34px system-ui, -apple-system, sans-serif';
+    ctx.fillText(committee.name || 'اللجنة الميدانية', 300, 310);
+
+    if (committee.location) {
+      ctx.fillStyle = '#93c5fd';
+      ctx.font = 'bold 20px system-ui, -apple-system, sans-serif';
+      ctx.fillText(`📍 موقع التمركز: ${committee.location}`, 300, 360);
+    }
+
+    // Supervisor Box
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
+    ctx.fillRect(80, 410, 440, 140);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(80, 410, 440, 140);
+
+    ctx.fillStyle = '#f59e0b';
+    ctx.font = 'bold 16px system-ui, -apple-system, sans-serif';
+    ctx.fillText('المشرف الميداني المسؤول', 300, 445);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 26px system-ui, -apple-system, sans-serif';
+    ctx.fillText(committee.leader || 'مشرف اللجنة', 300, 485);
+
+    if (committee.phone) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = 'bold 18px monospace';
+      ctx.fillText(committee.phone, 300, 525);
+    }
+
+    // Security & Verification Details
+    ctx.fillStyle = '#64748b';
+    ctx.font = '15px system-ui, -apple-system, sans-serif';
+    ctx.fillText(`كود التحقق: ${committee.id || 'MAR-VOL-01'}`, 300, 620);
+    ctx.fillText('صالحة طوال أيام الفعالية وتخول حاملها المرور عبر النقاط المحددة', 300, 650);
+
+    if (weddingDate) {
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '16px system-ui, -apple-system, sans-serif';
+      ctx.fillText(`تاريخ الفعالية: ${weddingDate}`, 300, 690);
+    }
+
+    // Footer
+    ctx.fillStyle = 'rgba(245, 158, 11, 0.8)';
+    ctx.font = 'bold 13px system-ui, -apple-system, sans-serif';
+    ctx.fillText('منظومة مراسيم الذكية لإدارة الأعراس الجماعية', 300, 745);
+
+    const badgeDataUrl = canvas.toDataURL('image/png');
+    downloadDataUrlAsBlob(badgeDataUrl, `بطاقة_متطوع_${committee.name || 'committee'}.png`);
+  };
+
+  const handlePrintBadge = () => {
+    const printWindow = window.open('', '_blank', 'width=650,height=800');
+    if (!printWindow) return;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html dir="rtl">
+        <head>
+          <title>طباعة بطاقة المتطوع: ${committee.name}</title>
+          <style>
+            body { font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 25px; background: #f8fafc; }
+            .badge-card {
+              max-width: 420px;
+              margin: 0 auto;
+              background: #0f172a;
+              color: white;
+              border: 3px solid #f59e0b;
+              border-radius: 24px;
+              padding: 24px;
+              box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            }
+            .header-org { color: #f59e0b; font-size: 14px; font-weight: bold; }
+            .header-title { color: white; font-size: 20px; font-weight: 900; margin-top: 4px; }
+            .approved-pill {
+              display: inline-block;
+              margin: 15px auto;
+              background: rgba(16, 185, 129, 0.2);
+              border: 1px solid #10b981;
+              color: #34d399;
+              padding: 6px 16px;
+              border-radius: 20px;
+              font-size: 13px;
+              font-weight: bold;
+            }
+            .team-name { color: #fde047; font-size: 26px; font-weight: 900; margin: 10px 0; }
+            .lead-box {
+              background: rgba(255,255,255,0.06);
+              border: 1px solid rgba(255,255,255,0.15);
+              border-radius: 16px;
+              padding: 12px;
+              margin: 15px 0;
+            }
+            .lead-name { font-size: 18px; font-weight: bold; color: white; margin-top: 4px; }
+            .footer-info { border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px; font-size: 11px; color: #94a3b8; }
+            @media print {
+              body { background: white; padding: 0; }
+              .badge-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="badge-card">
+            <div class="header-org">${weddingTitle}</div>
+            <div class="header-title">${organizer}</div>
+            <div class="approved-pill">⭐ متطوع ميداني معتمد</div>
+            <div style="font-size: 13px; color: #cbd5e1;">عضو رسمي في</div>
+            <div class="team-name">${committee.name}</div>
+            ${committee.location ? '<div style="font-size: 13px; color: #93c5fd;">📍 ' + committee.location + '</div>' : ''}
+            <div class="lead-box">
+              <div style="font-size: 11px; color: #f59e0b; font-weight: bold;">المشرف المسؤول:</div>
+              <div class="lead-name">${committee.leader || 'مشرف اللجنة'}</div>
+              ${committee.phone ? '<div style="font-size: 12px; color: #cbd5e1; direction: ltr;">' + committee.phone + '</div>' : ''}
+            </div>
+            <div class="footer-info">
+              <div>كود التحقق: ${committee.id || 'MAR-VOL-01'}</div>
+              <div style="margin-top: 4px;">صالحة طوال أيام الفعالية</div>
+            </div>
+          </div>
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   const members = committee.members || [];
@@ -299,6 +492,27 @@ export default function CommitteePortalView({
               <div className="border-t border-white/10 pt-3 flex items-center justify-between text-[10px] text-gray-400">
                 <span>كود التحقق: {committee.id || 'MAR-VOL-01'}</span>
                 <span>صالحة طوال أيام الفعالية</span>
+              </div>
+
+              {/* Save & Print Badge Actions */}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={handleSaveBadgeImage}
+                  className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-sm transition active:scale-95"
+                >
+                  <Download size={14} />
+                  <span>حفظ البطاقة كصورة</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePrintBadge}
+                  className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-white/15 hover:bg-white/25 text-white font-bold text-xs border border-white/20 transition active:scale-95"
+                >
+                  <Printer size={14} />
+                  <span>طباعة البطاقة</span>
+                </button>
               </div>
             </div>
           )}

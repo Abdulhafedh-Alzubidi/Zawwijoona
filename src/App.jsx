@@ -1881,6 +1881,19 @@ export default function App() {
     } else {
       const findInList = (list) => (list || []).find((c) => c.id === portalCommitteeId);
       portalCommittee = findInList(massWeddingData?.committees);
+      if (!portalCommittee && portalCommitteeId) {
+        try {
+          const directCom = localStorage.getItem(`maraseem_com_${portalCommitteeId}`);
+          if (directCom) {
+            portalCommittee = JSON.parse(directCom);
+            if (portalCommittee.weddingTitle) weddingTitle = portalCommittee.weddingTitle;
+            if (portalCommittee.weddingDate) weddingDate = portalCommittee.weddingDate;
+            if (portalCommittee.organizer) organizer = portalCommittee.organizer;
+          }
+        } catch (e) {
+          console.warn(e);
+        }
+      }
       if (!portalCommittee) {
         try {
           const cached = localStorage.getItem('maraseem_latest_mass_wedding_data');

@@ -1,45 +1,35 @@
 // src/utils/portalHelpers.js
 // مساعدات إنشاء وفك تشفير روابط بوابات اللجان الميدانية المتوافقة مع اللغة العربية
 
+// رابط نقي وموجز جداً لضمان رمز QR سريع المسح وواضح على أي كاميرا هاتف
+export function getCleanCommitteePortalUrl(committee) {
+  const baseUrl = window.location.origin + window.location.pathname;
+  if (!committee) return baseUrl;
+  return `${baseUrl}?portal=committee&committeeId=${encodeURIComponent(committee.id)}`;
+}
+
+// رابط مع كود مضغوط خفيف للنسخ والمشاركة
 export function generateCommitteePortalUrl(committee, weddingInfo = {}) {
   const baseUrl = window.location.origin + window.location.pathname;
   if (!committee) return baseUrl;
 
+  // Cache in localStorage immediately so short URLs resolve everywhere on this origin
   try {
-    const compactData = {
-      id: committee.id,
-      name: committee.name,
-      nameEn: committee.nameEn || '',
-      leader: committee.leader || '',
-      phone: committee.phone || '',
-      location: committee.location || '',
-      tasks: (committee.tasks && committee.tasks.length > 0)
-        ? committee.tasks
-        : (committee.responsibilities || []).map((r, i) => ({ id: `t-${i}`, text: r, completed: false })),
-      members: (committee.members || []).map((m) => ({
-        id: m.id,
-        name: m.name,
-        role: m.role || '',
-        phone: m.phone || '',
-      })),
-      weddingTitle: weddingInfo?.title || 'العرس الجماعي الخيري',
-      weddingDate: weddingInfo?.date || '',
-      organizer: weddingInfo?.organizer || 'اللجنة العليا المنظمة',
-    };
-
-    const jsonStr = JSON.stringify(compactData);
-    // Safe UTF-8 to Base64
-    const b64 = btoa(
-      encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (_, p1) =>
-        String.fromCharCode(parseInt(p1, 16))
-      )
+    localStorage.setItem(
+      `maraseem_com_${committee.id}`,
+      JSON.stringify({
+        ...committee,
+        weddingTitle: weddingInfo?.title || 'العرس الجماعي الخيري',
+        weddingDate: weddingInfo?.date || '',
+        organizer: weddingInfo?.organizer || 'اللجنة العليا المنظمة',
+      })
     );
-
-    return `${baseUrl}?portal=committee&committeeId=${encodeURIComponent(committee.id)}&cdata=${encodeURIComponent(b64)}`;
-  } catch (err) {
-    console.error('Failed to generate portal URL with cdata:', err);
-    return `${baseUrl}?portal=committee&committeeId=${encodeURIComponent(committee.id)}`;
+  } catch (e) {
+    console.warn(e);
   }
+
+  // Use clean short URL for ultra-fast scanning and clean sharing
+  return getCleanCommitteePortalUrl(committee);
 }
 
 export function decodeCommitteePortalData(cdata) {
@@ -55,5 +45,44 @@ export function decodeCommitteePortalData(cdata) {
   } catch (err) {
     console.error('Failed to decode committee portal data:', err);
     return null;
+  }
+}
+
+// دالة موثوقة بنسبة 100% لتحميل الصور عبر Blob في جميع المتصفحات
+export function downloadDataUrlAsBlob(dataUrl, filename) {
+  try {
+    const parts = dataUrl.split(';base64,');
+    const contentType = parts[0].split(':')[1] || 'image/png';
+    const raw = window.atob(parts[1]);
+    const rawLength = raw.length;
+    const uInt8Array = new Uint8Array(rawLength);
+    for (let i = 0; i < rawLength; ++i) {
+      uInt8Array[i] = raw.charCodeAt(i);
+    }
+    const blob = new Blob([uInt8Array], { type: contentType });
+    const blobUrl = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.style.display = 'none';
+    link.href = blobUrl;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    }, 250);
+    return true;
+  } catch (err) {
+    console.error('Download via Blob failed, fallback to direct open:', err);
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = filename;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => document.body.removeChild(link), 250);
+    return false;
   }
 }
