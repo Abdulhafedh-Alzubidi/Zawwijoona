@@ -43,9 +43,10 @@ export default function MassWeddingDashboard({
   const [editingExpense, setEditingExpense] = useState(null);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingScheduleItem, setEditingScheduleItem] = useState(null);
-  const [showEditRatesModal, setShowEditRatesModal] = useState(false);
   const [showAddSupplyModal, setShowAddSupplyModal] = useState(false);
   const [editingSupplyItem, setEditingSupplyItem] = useState(null);
+  const [supplyCategoryFilter, setSupplyCategoryFilter] = useState('all');
+  const [supplySearchQuery, setSupplySearchQuery] = useState('');
 
   // --- Search & Filters ---
   const [coupleSearch, setCoupleSearch] = useState('');
@@ -110,6 +111,16 @@ export default function MassWeddingDashboard({
       customItems
     );
   }, [couples, weddingInfo, calculatorRates, customItems]);
+
+  const filteredSupplies = useMemo(() => {
+    return (logistics.customSupplies || []).filter((item) => {
+      const matchesCategory = supplyCategoryFilter === 'all' || item.category === supplyCategoryFilter;
+      const matchesSearch = !supplySearchQuery.trim() ||
+        item.name.toLowerCase().includes(supplySearchQuery.toLowerCase()) ||
+        (item.note && item.note.toLowerCase().includes(supplySearchQuery.toLowerCase()));
+      return matchesCategory && matchesSearch;
+    });
+  }, [logistics.customSupplies, supplyCategoryFilter, supplySearchQuery]);
 
   // Overall Readiness Score
   const readinessScore = useMemo(() => {
@@ -256,26 +267,7 @@ export default function MassWeddingDashboard({
     }
   };
 
-  // --- Handlers: Smart Calculator Customization ---
-  const handleUpdateRates = (newRates) => {
-    const updatedSettings = {
-      ...(data.calculatorSettings || {}),
-      rates: newRates,
-      customItems: customItems
-    };
-    onUpdateData({ ...data, calculatorSettings: updatedSettings });
-    setShowEditRatesModal(false);
-  };
-
-  const handleResetRates = () => {
-    if (window.confirm(isRtl ? 'هل تريد استعادة كافة معدلات الاستهلاك والمواد إلى القيم الافتراضية؟' : 'Reset all rates and supplies to default values?')) {
-      const updatedSettings = {
-        rates: { ...DEFAULT_CALCULATOR_RATES },
-        customItems: [...DEFAULT_CUSTOM_LOGISTICS_ITEMS]
-      };
-      onUpdateData({ ...data, calculatorSettings: updatedSettings });
-    }
-  };
+  // --- Handlers: Supplies & Logistics Customization ---
 
   const handleSaveSupplyItem = (itemToSave) => {
     const existing = customItems;
@@ -572,7 +564,9 @@ export default function MassWeddingDashboard({
             <span className="text-xs text-gray-400 font-normal">{isRtl ? 'ضيف' : 'guests'}</span>
           </div>
           <div className="text-[11px] text-amber-700 font-bold mt-1">
-            {logistics.food.sheepCount} {isRtl ? 'ذبيحة مقدرة للوليمة' : 'sheep estimated'}
+            {logistics.customSupplies.length > 0
+              ? (isRtl ? `${logistics.customSupplies.length} مواد تموين مضافة` : `${logistics.customSupplies.length} supplies listed`)
+              : (isRtl ? 'حاسبة التموين تبدأ من الصفر' : 'Supplies start from zero')}
           </div>
         </div>
 
@@ -598,25 +592,27 @@ export default function MassWeddingDashboard({
           </div>
         </div>
 
-        {/* Metric 5: Tea & Hospitality Ready */}
+        {/* Metric 5: Custom Logistics & Supplies */}
         <div
           onClick={() => setActiveSubTab('logistics')}
           className="col-span-2 lg:col-span-1 bg-gradient-to-br from-amber-50 to-orange-50 p-4 sm:p-5 rounded-2xl border border-amber-200/80 shadow-sm hover:border-amber-400 cursor-pointer transition group"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-amber-900">
-              {isRtl ? 'فريق عدة الشاي والسقيا' : 'Tea Kit & Water Team'}
+              {isRtl ? 'مواد ومؤن التموين' : 'Catering & Supplies'}
             </span>
             <div className="w-8 h-8 rounded-xl bg-amber-600 text-white flex items-center justify-center group-hover:scale-110 transition">
-              <Coffee size={18} />
+              <Utensils size={18} />
             </div>
           </div>
           <div className="text-xl sm:text-2xl font-black text-amber-950">
-            {logistics.teaHospitality.teamSize}{' '}
-            <span className="text-xs text-amber-800 font-normal">{isRtl ? 'أفراد بعدة الشاي' : 'tea crew'}</span>
+            {logistics.customSupplies.length}{' '}
+            <span className="text-xs text-amber-800 font-normal">{isRtl ? 'مواد مضافة' : 'items'}</span>
           </div>
           <div className="text-[11px] text-amber-800 font-bold mt-1">
-            {logistics.hydration.largeDispensers} {isRtl ? 'برادات مياه باردة' : 'water dispensers'}
+            {logistics.customSupplies.length > 0
+              ? (isRtl ? 'محسوبة حسب الضيوف' : 'Calculated by guests')
+              : (isRtl ? 'حساب مخصص من الصفر' : 'Custom calculated from scratch')}
           </div>
         </div>
 
@@ -746,34 +742,33 @@ export default function MassWeddingDashboard({
             <div className="space-y-6">
 
               {/* Traditional Hospitality Card */}
+              {/* Supplies & Catering Card */}
               <div className="bg-gradient-to-br from-amber-900 to-orange-950 text-white p-6 rounded-3xl shadow-md space-y-4">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center">
-                    <Coffee size={24} className="text-amber-300" />
+                    <Utensils size={24} className="text-amber-300" />
                   </div>
                   <div>
-                    <h4 className="font-black text-lg">{isRtl ? 'ضيافة الشاهي والسقيا' : 'Traditional Tea & Water'}</h4>
-                    <p className="text-xs text-amber-200">{isRtl ? 'جاهزية عدة الشاهي الحضرمي وفريق الشاهوجية' : 'Hadhrami Tea Kit & Hydration'}</p>
+                    <h4 className="font-black text-lg">{isRtl ? 'حاسبة الوليمة والتموين' : 'Catering & Provisions'}</h4>
+                    <p className="text-xs text-amber-200">{isRtl ? 'حساب مواد ومؤن العرس من الصفر' : 'Custom calculated provisions'}</p>
                   </div>
                 </div>
 
                 <div className="space-y-2.5 text-xs border-t border-white/10 pt-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-amber-200">{isRtl ? 'فريق الشاهوجية المتفرغين:' : 'Tea Crew Size:'}</span>
-                    <span className="font-bold text-amber-100">{logistics.teaHospitality.teamSize} {isRtl ? 'شاهوجي' : 'members'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-amber-200">{isRtl ? 'قدور التخدير ودلال الصب:' : 'Brewing Pots & Kettles:'}</span>
-                    <span className="font-bold text-amber-100">{logistics.teaHospitality.brewingPots} {isRtl ? 'قدور كبرى' : 'pots'} / {logistics.teaHospitality.servingKettles} {isRtl ? 'دلال' : 'kettles'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-amber-200">{isRtl ? 'برادات وترامس المياه الباردة:' : 'Cold Water Dispensers:'}</span>
-                    <span className="font-bold text-amber-100">{logistics.hydration.largeDispensers} {isRtl ? 'براد/ترمس 80L' : 'large dispensers'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-amber-200">{isRtl ? 'قوالب الثلج المقررة:' : 'Ice Blocks Allocated:'}</span>
-                    <span className="font-bold text-amber-100">{logistics.hydration.iceBlocks} {isRtl ? 'قالب ثلج' : 'blocks'}</span>
-                  </div>
+                  {logistics.customSupplies.length > 0 ? (
+                    logistics.customSupplies.slice(0, 4).map((item) => (
+                      <div key={item.id} className="flex justify-between items-center">
+                        <span className="text-amber-200 truncate max-w-[170px]">{item.name}:</span>
+                        <span className="font-bold text-amber-100">
+                          {item.computedQuantity !== null && item.computedQuantity > 0 ? item.computedQuantity.toLocaleString() : '0'} {item.unit}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-2 text-center text-amber-200/80 text-xs">
+                      {isRtl ? 'لم تُضف مواد بعد. تبدأ الحاسبة من الصفر حسب رغبة المنظمين.' : 'No supplies added yet. Starts from zero.'}
+                    </div>
+                  )}
                 </div>
 
                 <button
@@ -781,7 +776,7 @@ export default function MassWeddingDashboard({
                   onClick={() => setActiveSubTab('logistics')}
                   className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-amber-950 font-black text-xs transition"
                 >
-                  {isRtl ? 'فتح تفاصيل حاسبة التموين 📋' : 'View Full Logistics 📋'}
+                  {isRtl ? 'فتح حاسبة التموين وإضافة المواد 📋' : 'Open Catering Calculator 📋'}
                 </button>
               </div>
 
@@ -1426,7 +1421,7 @@ export default function MassWeddingDashboard({
         </div>
       )}
 
-      {/* === SUB-TAB 6: LOGISTICS & BANQUET CALCULATOR (WITH TEA & WATER DISPENSERS) === */}
+      {/* === SUB-TAB 6: PROVISIONS & BANQUET CALCULATOR (CUSTOM FROM ZERO) === */}
       {activeSubTab === 'logistics' && (
         <div className="space-y-6">
 
@@ -1438,15 +1433,15 @@ export default function MassWeddingDashboard({
               <div className="space-y-1.5 max-w-2xl">
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20 text-orange-100">
                   <Utensils size={14} />
-                  <span>{isRtl ? 'الحاسبة الذكية للأعراس الجماعية' : 'Smart Logistics Calculator'}</span>
+                  <span>{isRtl ? 'حاسبة التموين والوليمة' : 'Catering & Logistics Calculator'}</span>
                 </div>
                 <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-                  <span>{isRtl ? 'حاسبة التموين والوليمة الكبرى وضيافة الشاهي والسقيا' : 'Banquet, Tea & Hydration Logistics'}</span>
+                  <span>{isRtl ? 'حاسبة الوليمة والتموين والمؤن' : 'Banquet & Provisions Calculator'}</span>
                 </h3>
                 <p className="text-xs sm:text-sm text-orange-100/90 leading-relaxed">
                   {isRtl
-                    ? `حساب دقيق وتفاعلي لمؤن الذبائح والأرز وعدة الشاي والسموار وبرادات المياه بناءً على (${couples.length}) عريس مسجل. جميع المعدلات والمواد قابلة للتعديل والإضافة حسب تفضيل المنظمين.`
-                    : `Interactive logistics calculator for livestock, tea kit team, samovars, and cold water hydration based on (${couples.length}) couples. Fully customizable rates and expandable items.`}
+                    ? `إضافة واحتساب مواد ومؤن العرس الجماعي من الصفر بدقة بناءً على (${couples.length}) عريس مسجل و(${logistics.totalGuests.toLocaleString()}) ضيف متوقع، أو ككميات مقطوعة محددة.`
+                    : `Add and calculate mass wedding banquet & catering provisions from scratch based on (${couples.length}) couples and (${logistics.totalGuests.toLocaleString()}) expected guests.`}
                 </p>
               </div>
 
@@ -1454,360 +1449,161 @@ export default function MassWeddingDashboard({
               <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setShowEditRatesModal(true)}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-white text-orange-800 hover:bg-orange-50 rounded-2xl font-black text-xs sm:text-sm shadow-md transition"
+                  onClick={() => {
+                    setEditingSupplyItem(null);
+                    setShowAddSupplyModal(true);
+                  }}
+                  className="flex items-center gap-2 px-5 py-3 bg-amber-500 hover:bg-amber-400 text-amber-950 rounded-2xl font-black text-xs sm:text-sm shadow-md transition"
                 >
-                  <Sliders size={16} className="text-orange-600" />
-                  <span>{isRtl ? '⚙️ تعديل معدلات الاستهلاك' : 'Tune Rates'}</span>
+                  <Plus size={18} />
+                  <span>{isRtl ? '➕ إضافة مادة أو مؤونة جديدة' : 'Add Supply Item'}</span>
                 </button>
+              </div>
+            </div>
 
+            {/* Quick Stats Strip */}
+            <div className="mt-5 pt-4 border-t border-white/20 flex flex-wrap items-center gap-2.5 text-xs font-bold text-orange-100">
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                👥 <span>{isRtl ? 'إجمالي الضيوف:' : 'Total Guests:'}</span>
+                <strong className="text-white font-black">{logistics.totalGuests.toLocaleString()}</strong>
+              </span>
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                💍 <span>{isRtl ? 'العرسان المسجلين:' : 'Couples:'}</span>
+                <strong className="text-white font-black">{couples.length}</strong>
+              </span>
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                📦 <span>{isRtl ? 'المواد المضافة:' : 'Added Items:'}</span>
+                <strong className="text-white font-black">{logistics.customSupplies.length}</strong>
+              </span>
+            </div>
+          </div>
+
+          {/* Section: Custom Provisions & Materials */}
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-gray-200/80 shadow-sm space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              {/* Category Pills */}
+              <div className="flex flex-wrap items-center gap-2">
+                {[
+                  { id: 'all', label: isRtl ? 'الكل' : 'All', count: logistics.customSupplies.length },
+                  { id: 'food', label: isRtl ? 'وليمة وإطعام' : 'Food & Feast', count: logistics.customSupplies.filter((i) => i.category === 'food').length },
+                  { id: 'teaHospitality', label: isRtl ? 'عدة الشاي والسموار' : 'Tea & Hospitality', count: logistics.customSupplies.filter((i) => i.category === 'teaHospitality').length },
+                  { id: 'hydration', label: isRtl ? 'سقيا الماء' : 'Water & Ice', count: logistics.customSupplies.filter((i) => i.category === 'hydration').length },
+                  { id: 'venue', label: isRtl ? 'الساحة والمخادر' : 'Venue & Setup', count: logistics.customSupplies.filter((i) => i.category === 'venue').length },
+                  { id: 'general', label: isRtl ? 'عامة' : 'General', count: logistics.customSupplies.filter((i) => i.category === 'general').length }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setSupplyCategoryFilter(tab.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 ${
+                      supplyCategoryFilter === tab.id
+                        ? 'bg-amber-600 text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-md ${
+                      supplyCategoryFilter === tab.id ? 'bg-amber-700 text-white' : 'bg-gray-200 text-gray-700'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Search & Add Button */}
+              <div className="flex items-center gap-2">
+                {logistics.customSupplies.length > 2 && (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder={isRtl ? 'بحث في المواد...' : 'Search supplies...'}
+                      value={supplySearchQuery}
+                      onChange={(e) => setSupplySearchQuery(e.target.value)}
+                      className="px-3 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-xl font-bold pr-8"
+                    />
+                    <Search size={14} className="absolute right-2.5 top-2.5 text-gray-400" />
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => {
                     setEditingSupplyItem(null);
                     setShowAddSupplyModal(true);
                   }}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-amber-950 rounded-2xl font-black text-xs sm:text-sm shadow-md transition"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl border border-amber-200 transition shrink-0"
+                >
+                  <Plus size={15} />
+                  <span>{isRtl ? 'إضافة مادة' : 'Add Item'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Empty State: Zero Supplies */}
+            {logistics.customSupplies.length === 0 ? (
+              <div className="p-8 sm:p-12 rounded-2xl bg-amber-50/40 border-2 border-dashed border-amber-200/90 flex flex-col justify-center items-center text-center space-y-3">
+                <div className="w-14 h-14 rounded-3xl bg-amber-100 text-amber-800 flex items-center justify-center font-black">
+                  <Utensils size={28} />
+                </div>
+                <div className="max-w-md space-y-1">
+                  <h5 className="font-black text-base text-gray-900">
+                    {isRtl ? 'لا توجد أي بيانات أو مواد مضافة بعد' : 'No Supplies Added Yet'}
+                  </h5>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    {isRtl
+                      ? 'تم حذف كافة الحسابات الافتراضية بنجاح للبدء من الصفر. يمكنك الآن إضافة الذبائح، الأرز، برادات الماء، عدة الشاي، أو أي مستلزمات أخرى وسيتم احتسابها تلقائياً حسب عدد المعازيم أو ككميات مقطوعة.'
+                      : 'All default calculations have been reset to start from scratch. Add livestock, rice, water dispensers, tea kits, or any custom supplies to calculate automatically.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingSupplyItem(null);
+                    setShowAddSupplyModal(true);
+                  }}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-black text-xs sm:text-sm rounded-2xl shadow-md transition"
                 >
                   <Plus size={16} />
-                  <span>{isRtl ? '➕ إضافة مادة أو مؤونة' : 'Add Item'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleResetRates}
-                  className="flex items-center gap-1.5 px-3 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-bold text-xs backdrop-blur-md transition border border-white/20"
-                  title={isRtl ? 'استعادة المعدلات الافتراضية' : 'Reset to Defaults'}
-                >
-                  <RotateCcw size={14} />
-                  <span className="hidden sm:inline">{isRtl ? 'استعادة الافتراضي' : 'Reset'}</span>
+                  <span>{isRtl ? '➕ إضافة أول مادة أو مؤونة الآن' : 'Add First Supply Item'}</span>
                 </button>
               </div>
-            </div>
-
-            {/* Quick Rates Strip */}
-            <div className="mt-5 pt-4 border-t border-white/20 flex flex-wrap items-center gap-2 text-[11px] font-bold text-orange-100">
-              <span className="text-white/80">{isRtl ? 'المعدلات المطبقة حالياً:' : 'Active Rates:'}</span>
-              <span className="bg-black/20 px-2.5 py-1 rounded-xl">
-                🐑 {calculatorRates.sheepMode === 'fixed'
-                  ? (isRtl ? `كمية ثابتة (${logistics.food.sheepCount} رأس)` : `Fixed (${logistics.food.sheepCount} sheep)`)
-                  : (isRtl ? `1 ذبيحة لكل ${calculatorRates.guestsPerSheep} ضيف` : `1 sheep / ${calculatorRates.guestsPerSheep} guests`)}
-              </span>
-              <span className="bg-black/20 px-2.5 py-1 rounded-xl">
-                ☕ {calculatorRates.teaTeamMode === 'fixed'
-                  ? (isRtl ? `فريق شاي مقطوع (${logistics.teaHospitality.teamSize} أفراد)` : `Fixed Team (${logistics.teaHospitality.teamSize})`)
-                  : (isRtl ? `1 فرد بعدة الشاي لكل ${calculatorRates.guestsPerTeaMember} ضيف` : `1 crew / ${calculatorRates.guestsPerTeaMember} guests`)}
-              </span>
-              <span className="bg-black/20 px-2.5 py-1 rounded-xl">
-                🔥 {calculatorRates.samovarsMode === 'fixed'
-                  ? (isRtl ? `سموارات ثابتة (${logistics.teaHospitality.samovarsCount})` : `Fixed Samovars (${logistics.teaHospitality.samovarsCount})`)
-                  : (isRtl ? `1 سموار تخدير لكل ${calculatorRates.guestsPerSamovar} ضيف` : `1 samovar / ${calculatorRates.guestsPerSamovar} guests`)}
-              </span>
-              <span className="bg-black/20 px-2.5 py-1 rounded-xl">
-                💧 {calculatorRates.waterDispensersMode === 'fixed'
-                  ? (isRtl ? `برادات ثابتة (${logistics.hydration.largeDispensers})` : `Fixed Dispensers (${logistics.hydration.largeDispensers})`)
-                  : (isRtl ? `1 براد ماء كبير لكل ${calculatorRates.guestsPerWaterDispenser} ضيف` : `1 dispenser / ${calculatorRates.guestsPerWaterDispenser} guests`)}
-              </span>
-              <span className="bg-black/20 px-2.5 py-1 rounded-xl">
-                🍚 {calculatorRates.riceMode === 'fixed'
-                  ? (isRtl ? `أرز ثابت (${logistics.food.riceBags40kg} كيس)` : `Fixed Rice (${logistics.food.riceBags40kg} sacks)`)
-                  : (isRtl ? `1 كيس أرز لكل ${calculatorRates.guestsPerRiceBag40kg} ضيف` : `1 sack / ${calculatorRates.guestsPerRiceBag40kg} guests`)}
-              </span>
-            </div>
-          </div>
-
-          {/* 4 Standard Logistics Boxes */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-
-            {/* Box 1: Grand Feast & Livestock */}
-            <div className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-sm space-y-3 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-orange-100 text-orange-700 flex items-center justify-center font-bold">
-                      <Utensils size={20} />
-                    </div>
-                    <div>
-                      <h4 className="font-black text-sm text-gray-900">{isRtl ? 'الذبائح واللحوم والأرز' : 'Livestock & Banquet'}</h4>
-                      <span className="text-[11px] text-gray-500">{isRtl ? 'وليمة الغداء الكبرى' : 'Grand Banquet'}</span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] bg-orange-50 text-orange-700 font-extrabold px-2 py-0.5 rounded-lg border border-orange-200">
-                    {calculatorRates.sheepMode === 'fixed'
-                      ? (isRtl ? '🔒 كمية مقطوعة' : '🔒 Fixed Quantity')
-                      : (isRtl ? `${calculatorRates.guestsPerSheep} ضيف/رأس` : `${calculatorRates.guestsPerSheep} guests/sheep`)}
-                  </span>
-                </div>
-
-                <div className="space-y-2 text-xs border-t border-gray-100 pt-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'عدد الذبائح التقديري:' : 'Estimated Sheep:'}</span>
-                    <span className="font-extrabold text-orange-700 text-sm">{logistics.food.sheepCount} {isRtl ? 'رأس غنم' : 'sheep'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'صافي اللحم بالكيلو:' : 'Net Meat Approx:'}</span>
-                    <span className="font-bold text-gray-800">{logistics.food.meatKilosApprox} كجم</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'أكياس أرز بسمتي (40 كجم):' : 'Rice Sacks (40kg):'}</span>
-                    <span className="font-extrabold text-orange-700 text-sm">{logistics.food.riceBags40kg} {isRtl ? 'كيس' : 'sacks'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'كراتين زيت وسمن الطهي:' : 'Cooking Oil Cartons:'}</span>
-                    <span className="font-bold text-gray-800">{logistics.food.cookingOilCartons} {isRtl ? 'كرتون' : 'cartons'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'بهارات مشكمة وتوابل:' : 'Spices Approx:'}</span>
-                    <span className="font-bold text-gray-800">{logistics.food.spicesKilos} كجم</span>
-                  </div>
-                </div>
+            ) : filteredSupplies.length === 0 ? (
+              <div className="p-8 rounded-2xl bg-gray-50 border border-gray-200 text-center text-gray-500 text-xs">
+                {isRtl ? 'لا توجد مواد مطابقة للتصفية أو البحث المحدد.' : 'No items match your filter.'}
               </div>
+            ) : (
+              /* Custom Items Grid */
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1">
+                {filteredSupplies.map((item) => {
+                  const categoryBadge =
+                    item.category === 'teaHospitality'
+                      ? { label: isRtl ? 'عدة الشاي والسموار' : 'Tea Hospitality', color: 'bg-amber-100 text-amber-800 border-amber-200' }
+                      : item.category === 'food'
+                        ? { label: isRtl ? 'وليمة وإطعام' : 'Food & Feast', color: 'bg-orange-100 text-orange-800 border-orange-200' }
+                        : item.category === 'hydration'
+                          ? { label: isRtl ? 'سقيا الماء' : 'Water & Hydration', color: 'bg-blue-100 text-blue-800 border-blue-200' }
+                          : item.category === 'venue'
+                            ? { label: isRtl ? 'الساحة والمخادر' : 'Venue & Setup', color: 'bg-emerald-100 text-emerald-800 border-emerald-200' }
+                            : { label: isRtl ? 'عامة' : 'General', color: 'bg-gray-100 text-gray-800 border-gray-200' };
 
-              <div className="pt-2 text-[10px] text-gray-400 border-t border-gray-50 flex items-center justify-between">
-                <span>{isRtl ? 'بناءً على المعازيم والوجهاء' : 'Based on attendance'}</span>
-                <button
-                  type="button"
-                  onClick={() => setShowEditRatesModal(true)}
-                  className="text-orange-600 font-bold hover:underline"
-                >
-                  {isRtl ? 'تعديل المعدل ⚙️' : 'Tune ⚙️'}
-                </button>
-              </div>
-            </div>
+                  return (
+                    <div
+                      key={item.id}
+                      className="p-4 rounded-2xl bg-gray-50/80 hover:bg-white border border-gray-200 hover:border-amber-400 hover:shadow-sm transition flex flex-col justify-between space-y-3"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-lg border ${categoryBadge.color}`}>
+                            {categoryBadge.label}
+                          </span>
 
-            {/* Box 2: Hadhrami Tea Kit & Tea Team (فريق عدة الشاي والسموار) */}
-            <div className="bg-white p-5 rounded-3xl border-2 border-amber-300 shadow-sm space-y-3 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-amber-600 text-white flex items-center justify-center font-bold shadow-md shadow-amber-200">
-                      <Coffee size={20} />
-                    </div>
-                    <div>
-                      <h4 className="font-black text-sm text-gray-900">{isRtl ? 'ضيافة الشاهي الحضرمي' : 'Hadhrami Tea Kit'}</h4>
-                      <span className="text-[11px] text-amber-700 font-bold">{isRtl ? 'فريق عدة الشاي ومعدات السموار' : 'Tea Kit Team & Samovar'}</span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded-lg border border-amber-300">
-                    {calculatorRates.teaTeamMode === 'fixed'
-                      ? (isRtl ? '🔒 كمية مقطوعة' : '🔒 Fixed Crew')
-                      : (isRtl ? `${calculatorRates.guestsPerTeaMember} ضيف/فرد` : `${calculatorRates.guestsPerTeaMember} guests/crew`)}
-                  </span>
-                </div>
-
-                <div className="space-y-2 text-xs border-t border-gray-100 pt-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 font-medium">{isRtl ? 'فريق عدة الشاي (صبابين ومعدين):' : 'Tea Kit Crew (Brewers & Pourers):'}</span>
-                    <span className="font-extrabold text-amber-800 text-sm">{logistics.teaHospitality.teamSize} {isRtl ? 'أفراد' : 'crew'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 font-medium">{isRtl ? 'أواني السموار للتخدير (السموارات):' : 'Samovars (السموار):'}</span>
-                    <span className="font-extrabold text-amber-800 text-sm">{logistics.teaHospitality.samovarsCount} {isRtl ? 'سموارات كبرى' : 'samovars'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'برادات ودلال الصب المتنقلة:' : 'Serving Kettles (دلال):'}</span>
-                    <span className="font-bold text-gray-800">{logistics.teaHospitality.servingKettles} {isRtl ? 'دلال وبرادات' : 'kettles'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'صينيات توزيع الشاي:' : 'Tea Serving Trays:'}</span>
-                    <span className="font-extrabold text-amber-800 text-sm">{logistics.teaHospitality.teaTraysCount} {isRtl ? 'صينية تقديم' : 'trays'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'فناجين واستكانات الشاي:' : 'Tea Cups & Glasses:'}</span>
-                    <span className="font-extrabold text-amber-800 text-sm">{(logistics.teaHospitality.teaCupsCount || logistics.teaHospitality.glassesCount || 0).toLocaleString()} {isRtl ? 'فنجان' : 'cups'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'أكياس السكر (50 كجم):' : 'Sugar Sacks (50kg):'}</span>
-                    <span className="font-bold text-gray-800">{logistics.teaHospitality.sugarBags50kg} {isRtl ? 'كيس' : 'sacks'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'الشاي السيلاني بالكيلو:' : 'Ceylon Tea Leaves:'}</span>
-                    <span className="font-bold text-gray-800">{logistics.teaHospitality.teaLeavesKg} كجم</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'فحم طبيعي للسموارات:' : 'Charcoal Sacks:'}</span>
-                    <span className="font-bold text-gray-800">{logistics.teaHospitality.charcoalBags} {isRtl ? 'أكياس فحم' : 'sacks'}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-2 text-[10px] text-amber-700/80 border-t border-amber-50 flex items-center justify-between">
-                <span>{isRtl ? 'تجهيز الشاهي الأحمر والعدني طوال اليوم' : 'Continuous brewing'}</span>
-                <button
-                  type="button"
-                  onClick={() => setShowEditRatesModal(true)}
-                  className="text-amber-800 font-bold hover:underline"
-                >
-                  {isRtl ? 'تعديل عدة الشاي ⚙️' : 'Tune ⚙️'}
-                </button>
-              </div>
-            </div>
-
-            {/* Box 3: Cold Water Dispensers & Hydration (سقيا الماء البارد) */}
-            <div className="bg-white p-5 rounded-3xl border-2 border-blue-200 shadow-sm space-y-3 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-blue-500 text-white flex items-center justify-center font-bold shadow-md shadow-blue-200">
-                      <Droplets size={20} />
-                    </div>
-                    <div>
-                      <h4 className="font-black text-sm text-gray-900">{isRtl ? 'سقيا الماء البارد' : 'Cold Water Hydration'}</h4>
-                      <span className="text-[11px] text-blue-700 font-bold">{isRtl ? 'برادات وترامس وتبريد' : 'Dispensers & Ice'}</span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] bg-blue-50 text-blue-800 font-extrabold px-2 py-0.5 rounded-lg border border-blue-200">
-                    {calculatorRates.waterDispensersMode === 'fixed'
-                      ? (isRtl ? '🔒 كمية مقطوعة' : '🔒 Fixed Quantity')
-                      : (isRtl ? `${calculatorRates.guestsPerWaterDispenser} ضيف/براد` : `${calculatorRates.guestsPerWaterDispenser} guests/dispenser`)}
-                  </span>
-                </div>
-
-                <div className="space-y-2 text-xs border-t border-gray-100 pt-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'برادات وترامس كبرى (60-80L):' : 'Large Dispensers (60-80L):'}</span>
-                    <span className="font-extrabold text-blue-800 text-sm">{logistics.hydration.largeDispensers} {isRtl ? 'برادات وترامس' : 'units'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'قوالب الثلج المقررة للتبريد:' : 'Ice Blocks Allocated:'}</span>
-                    <span className="font-extrabold text-blue-800 text-sm">{logistics.hydration.iceBlocks} {isRtl ? 'قالب ثلج' : 'ice blocks'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'كراتين مياه مبردة معبأة:' : 'Bottled Water Cartons:'}</span>
-                    <span className="font-bold text-gray-800">{logistics.hydration.bottledWaterCartons} {isRtl ? 'كرتون' : 'cartons'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'أكواب شرب بلاستيكية/ورقية:' : 'Drinking Cups:'}</span>
-                    <span className="font-bold text-gray-800">{logistics.hydration.cupsCount.toLocaleString()} {isRtl ? 'كوب' : 'cups'}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-2 text-[10px] text-blue-600 border-t border-blue-50 flex items-center justify-between">
-                <span>{isRtl ? 'توزيع في الساحات والمخادر' : 'Distributed around venue'}</span>
-                <button
-                  type="button"
-                  onClick={() => setShowEditRatesModal(true)}
-                  className="text-blue-700 font-bold hover:underline"
-                >
-                  {isRtl ? 'تعديل السقيا ⚙️' : 'Tune ⚙️'}
-                </button>
-              </div>
-            </div>
-
-            {/* Box 4: Venue & Pavilion Space (المخادر والخيام والفرش) */}
-            <div className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-sm space-y-3 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
-                      <Tent size={20} />
-                    </div>
-                    <div>
-                      <h4 className="font-black text-sm text-gray-900">{isRtl ? 'المخادر والخيام والفرش' : 'Venue & Carpets'}</h4>
-                      <span className="text-[11px] text-gray-500">{isRtl ? 'ساحة الاحتفال الكبرى' : 'Grounds Setup'}</span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] bg-amber-50 text-amber-900 font-extrabold px-2 py-0.5 rounded-lg border border-amber-200">
-                    {calculatorRates.carpetsMode === 'fixed'
-                      ? (isRtl ? '🔒 كمية مقطوعة' : '🔒 Fixed Quantity')
-                      : (isRtl ? `${calculatorRates.guestsPerCarpet} ضيف/سجادة` : `${calculatorRates.guestsPerCarpet} guests/carpet`)}
-                  </span>
-                </div>
-
-                <div className="space-y-2 text-xs border-t border-gray-100 pt-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'سجاد تقليدي كبير (4×3 م):' : 'Traditional Carpets:'}</span>
-                    <span className="font-extrabold text-amber-900 text-sm">{logistics.venueLogistics.carpetsCount} {isRtl ? 'سجادة' : 'carpets'}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'مساحة المظلات والخيام:' : 'Tents / Shade Area:'}</span>
-                    <span className="font-bold text-gray-800">{logistics.venueLogistics.tentsAreaSqMeters} م²</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500">{isRtl ? 'مراوح رذاذ وتبريد الساحة:' : 'Misting Fans / Coolers:'}</span>
-                    <span className="font-bold text-gray-800">{logistics.venueLogistics.fansOrCoolersCount} {isRtl ? 'مروحة' : 'coolers'}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-2 text-[10px] text-gray-400 border-t border-gray-50 flex items-center justify-between">
-                <span>{isRtl ? 'تغطية الساحات المفتوحة' : 'Open grounds setup'}</span>
-                <button
-                  type="button"
-                  onClick={() => setShowEditRatesModal(true)}
-                  className="text-amber-800 font-bold hover:underline"
-                >
-                  {isRtl ? 'تعديل الفرش ⚙️' : 'Tune ⚙️'}
-                </button>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Section: Custom Logistics & Extra Provisions (المواد والمؤن المخصصة وإضافات المنظمين) */}
-          <div className="bg-white p-6 rounded-3xl border border-gray-200/80 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h4 className="font-black text-base text-gray-900 flex items-center gap-2">
-                  <Sparkles size={18} className="text-amber-600" />
-                  <span>{isRtl ? 'المواد والمؤن المخصصة وإضافات المنظمين' : 'Custom Provisions & Specialized Supplies'}</span>
-                  <span className="text-xs bg-amber-100 text-amber-800 font-black px-2 py-0.5 rounded-full">
-                    {logistics.customSupplies.length}
-                  </span>
-                </h4>
-                <p className="text-xs text-gray-500">
-                  {isRtl
-                    ? 'مواد ومستلزمات إضافية قام المنظمون بتخصيصها لحساب كمياتها تلقائياً مع كل زيادة في عدد العرسان والضيوف.'
-                    : 'Additional custom materials with dynamic or fixed calculation rules added by event organizers.'}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingSupplyItem(null);
-                  setShowAddSupplyModal(true);
-                }}
-                className="flex items-center gap-2 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl border border-amber-200 transition shrink-0"
-              >
-                <Plus size={15} />
-                <span>{isRtl ? 'إضافة مادة أو مؤونة جديدة' : 'Add Custom Material'}</span>
-              </button>
-            </div>
-
-            {/* Custom Items Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
-              {logistics.customSupplies.map((item) => {
-                const categoryBadge =
-                  item.category === 'teaHospitality'
-                    ? { label: isRtl ? 'عدة الشاي والسموار' : 'Tea Hospitality', color: 'bg-amber-100 text-amber-800 border-amber-200' }
-                    : item.category === 'food'
-                      ? { label: isRtl ? 'وليمة وطعام' : 'Food & Feast', color: 'bg-orange-100 text-orange-800 border-orange-200' }
-                      : item.category === 'hydration'
-                        ? { label: isRtl ? 'سقيا الماء' : 'Water & Hydration', color: 'bg-blue-100 text-blue-800 border-blue-200' }
-                        : item.category === 'venue'
-                          ? { label: isRtl ? 'الساحة والمخادر' : 'Venue & Setup', color: 'bg-emerald-100 text-emerald-800 border-emerald-200' }
-                          : { label: isRtl ? 'عامة' : 'General', color: 'bg-gray-100 text-gray-800 border-gray-200' };
-
-                return (
-                  <div
-                    key={item.id}
-                    className="p-4 rounded-2xl bg-gray-50/80 hover:bg-white border border-gray-200 hover:border-amber-400 hover:shadow-sm transition flex flex-col justify-between space-y-3"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border ${categoryBadge.color}`}>
-                          {categoryBadge.label}
-                        </span>
-
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingSupplyItem(item);
-                              setShowAddSupplyModal(true);
-                            }}
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingSupplyItem(item);
+                                setShowAddSupplyModal(true);
+                              }}
                             className="p-1 text-gray-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition"
                             title={isRtl ? 'تعديل المادة' : 'Edit Item'}
                           >
@@ -1846,13 +1642,6 @@ export default function MassWeddingDashboard({
                 );
               })}
 
-              {logistics.customSupplies.length === 0 && (
-                <div className="sm:col-span-2 lg:col-span-2 p-6 rounded-2xl bg-amber-50/40 border border-dashed border-amber-200/80 flex flex-col justify-center items-center text-center">
-                  <p className="text-xs font-bold text-amber-900 mb-0.5">{isRtl ? 'لا توجد مواد مخصصة مضافة بعد' : 'No custom provisions added yet'}</p>
-                  <p className="text-[11px] text-gray-500">{isRtl ? 'أضف المواد التي تهمك لحساب نسبها وكمياتها المحددة تلقائياً' : 'Add custom materials to specify ratios or fixed amounts'}</p>
-                </div>
-              )}
-
               {/* Dotted Quick Add Box */}
               <button
                 type="button"
@@ -1868,6 +1657,7 @@ export default function MassWeddingDashboard({
                 <span className="text-xs font-black">{isRtl ? 'إضافة مادة أو مؤونة جديدة' : 'Add New Supply Item'}</span>
               </button>
             </div>
+            )}
           </div>
 
         </div>
@@ -2344,19 +2134,7 @@ export default function MassWeddingDashboard({
         </div>
       )}
 
-      {/* Modal 5: Edit Rates Modal */}
-      {showEditRatesModal && (
-        <EditRatesModal
-          isOpen={showEditRatesModal}
-          onClose={() => setShowEditRatesModal(false)}
-          currentRates={calculatorRates}
-          onSave={handleUpdateRates}
-          onReset={handleResetRates}
-          isRtl={isRtl}
-        />
-      )}
-
-      {/* Modal 6: Add / Edit Supply Item Modal */}
+      {/* Modal: Add / Edit Supply Item Modal */}
       {showAddSupplyModal && (
         <SupplyItemModal
           isOpen={showAddSupplyModal}
@@ -2366,6 +2144,7 @@ export default function MassWeddingDashboard({
           }}
           editingItem={editingSupplyItem}
           onSave={handleSaveSupplyItem}
+          totalGuests={logistics.totalGuests}
           isRtl={isRtl}
         />
       )}
@@ -2374,571 +2153,29 @@ export default function MassWeddingDashboard({
   );
 }
 
-// ==========================================
-// HELPER: RATE ITEM WITH RATIO / FIXED TOGGLE
-// ==========================================
-function RateItemCard({
-  title,
-  description,
-  mode,
-  onModeChange,
-  ratioValue,
-  onRatioChange,
-  ratioUnitLabel,
-  fixedValue,
-  onFixedChange,
-  fixedUnitLabel,
-  isRtl
-}) {
-  return (
-    <div className="p-2.5 sm:p-3 bg-gray-50/80 hover:bg-white rounded-2xl border border-gray-200/90 hover:border-amber-300 transition space-y-2">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-        <div className="min-w-0">
-          <span className="font-bold text-xs text-gray-900 block truncate">{title}</span>
-          {description && <span className="text-[10px] text-gray-500 leading-tight block truncate">{description}</span>}
-        </div>
 
-        {/* Segmented Mode Switcher */}
-        <div className="flex items-center gap-0.5 bg-white p-0.5 rounded-lg border border-gray-200 shadow-2xs self-start sm:self-auto shrink-0">
-          <button
-            type="button"
-            onClick={() => onModeChange('ratio')}
-            className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold transition ${mode === 'ratio'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-gray-600 hover:text-gray-900'
-              }`}
-          >
-            {isRtl ? '📊 نسبة' : 'Ratio'}
-          </button>
-          <button
-            type="button"
-            onClick={() => onModeChange('fixed')}
-            className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold transition ${mode === 'fixed'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-gray-600 hover:text-gray-900'
-              }`}
-          >
-            {isRtl ? '🔒 مقطوع' : 'Fixed'}
-          </button>
-        </div>
-      </div>
-
-      {/* Input Field according to active mode */}
-      <div>
-        {mode === 'ratio' ? (
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              step="any"
-              min="0.001"
-              value={ratioValue ?? ''}
-              onChange={(e) => onRatioChange(e.target.value)}
-              className="w-full h-8 bg-white border border-gray-200 rounded-xl px-2.5 py-1 font-bold text-gray-900 text-xs shadow-2xs focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-            />
-            <span className="text-gray-500 font-bold text-[10px] shrink-0">{ratioUnitLabel}</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              step="any"
-              min="0.1"
-              value={fixedValue ?? ''}
-              onChange={(e) => onFixedChange(e.target.value)}
-              className="w-full h-8 bg-white border border-amber-300 rounded-xl px-2.5 py-1 font-bold text-amber-900 text-xs shadow-2xs focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-            />
-            <span className="text-amber-800 font-bold text-[10px] shrink-0">{fixedUnitLabel}</span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ==========================================
-// MODAL: EDIT CONSUMPTION & LOGISTICS RATES
-// ==========================================
-function EditRatesModal({ isOpen, onClose, currentRates, onSave, onReset, isRtl }) {
-  const [rates, setRates] = useState({ ...currentRates });
-  // Tabs: 'food' | 'tea' | 'water' | 'venue'
-  const [activeTab, setActiveTab] = useState('food');
-
-  if (!isOpen) return null;
-
-  const handleChange = (field, val) => {
-    setRates((prev) => ({
-      ...prev,
-      [field]: val === '' ? '' : Number(val)
-    }));
-  };
-
-  const handleModeChange = (modeField, newMode) => {
-    setRates((prev) => ({
-      ...prev,
-      [modeField]: newMode
-    }));
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSave(rates);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm overflow-hidden">
-      <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-amber-100 flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden">
-
-        {/* Pinned Sticky Header */}
-        <div className="shrink-0 p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between bg-white z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-orange-100 text-orange-700 flex items-center justify-center font-bold shrink-0">
-              <Sliders size={20} />
-            </div>
-            <div>
-              <h3 className="text-sm sm:text-base font-black text-gray-900">
-                {isRtl ? 'تعديل معدلات الاستهلاك والتموين' : 'Edit Consumption & Logistics Rates'}
-              </h3>
-              <p className="text-[11px] text-gray-500 line-clamp-1">
-                {isRtl ? 'تخصيص الحصص إما بنسبة وتناسب مع الحضور أو كميات مقطوعة ثابتة' : 'Tune items by guest ratio or fixed amounts'}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition shrink-0"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Pinned Category Tabs */}
-        <div className="shrink-0 px-3 sm:px-5 py-2.5 bg-gray-50/70 border-b border-gray-100 flex gap-1.5 overflow-x-auto scrollbar-none z-10">
-          <button
-            type="button"
-            onClick={() => setActiveTab('food')}
-            className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-xs whitespace-nowrap ${activeTab === 'food' ? 'bg-orange-100 text-orange-900 font-black shadow-2xs' : 'text-gray-600 hover:bg-gray-100'
-              }`}
-          >
-            <Utensils size={14} />
-            <span>{isRtl ? 'الوليمة واللحوم والأرز' : 'Feast & Livestock'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('tea')}
-            className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-xs whitespace-nowrap ${activeTab === 'tea' ? 'bg-amber-100 text-amber-900 font-black shadow-2xs' : 'text-gray-600 hover:bg-gray-100'
-              }`}
-          >
-            <Coffee size={14} />
-            <span>{isRtl ? 'عدة الشاي والسموار' : 'Tea Kit & Samovars'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('water')}
-            className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-xs whitespace-nowrap ${activeTab === 'water' ? 'bg-blue-100 text-blue-900 font-black shadow-2xs' : 'text-gray-600 hover:bg-gray-100'
-              }`}
-          >
-            <Droplets size={14} />
-            <span>{isRtl ? 'سقيا الماء البارد' : 'Cold Water'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('venue')}
-            className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-xs whitespace-nowrap ${activeTab === 'venue' ? 'bg-amber-100 text-amber-950 font-black shadow-2xs border border-amber-300/60' : 'text-gray-600 hover:bg-gray-100'
-              }`}
-          >
-            <Tent size={14} />
-            <span>{isRtl ? 'المخادر والخيام والفرش' : 'Venue & Carpets'}</span>
-          </button>
-        </div>
-
-        {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} id="edit-rates-form" className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-3.5 custom-scrollbar min-h-0">
-
-          {/* TAB 1: FEAST & LIVESTOCK (الوليمة واللحوم والأرز) */}
-          {activeTab === 'food' && (
-            <div className="space-y-3 text-xs">
-              <div className="p-3 bg-orange-50/70 border border-orange-200 rounded-2xl text-[11px] text-orange-900 leading-relaxed flex items-center justify-between">
-                <span>{isRtl ? '🍖 حدد لكل مادة إما حسابها تلقائياً بحسب عدد الضيوف أو تحديد كمية مقطوعة ثابتة.' : 'Set each item as ratio per guests or fixed quantity.'}</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <RateItemCard
-                  title={isRtl ? 'عدد الذبائح التقديري' : 'Estimated Sheep'}
-                  description={isRtl ? 'وليمة الغداء الكبرى' : 'Banquet feast'}
-                  mode={rates.sheepMode || 'ratio'}
-                  onModeChange={(m) => handleModeChange('sheepMode', m)}
-                  ratioValue={rates.guestsPerSheep || 16}
-                  onRatioChange={(v) => handleChange('guestsPerSheep', v)}
-                  ratioUnitLabel={isRtl ? 'ضيف لكل رأس' : 'guests/sheep'}
-                  fixedValue={rates.fixedSheepCount || 24}
-                  onFixedChange={(v) => handleChange('fixedSheepCount', v)}
-                  fixedUnitLabel={isRtl ? 'رأس غنم ثابت' : 'fixed sheep'}
-                  isRtl={isRtl}
-                />
-
-                <RateItemCard
-                  title={isRtl ? 'صافي اللحم بالكيلو' : 'Net Meat Approx'}
-                  description={isRtl ? 'اللحم الصافي المقدر للطهي' : 'Cooked meat kg'}
-                  mode={rates.meatMode || 'ratio'}
-                  onModeChange={(m) => handleModeChange('meatMode', m)}
-                  ratioValue={rates.meatKilosPerSheep || 13}
-                  onRatioChange={(v) => handleChange('meatKilosPerSheep', v)}
-                  ratioUnitLabel={isRtl ? 'كجم لكل ذبيحة' : 'kg/sheep'}
-                  fixedValue={rates.fixedMeatKilos || 312}
-                  onFixedChange={(v) => handleChange('fixedMeatKilos', v)}
-                  fixedUnitLabel={isRtl ? 'كجم لحم ثابت' : 'fixed kg meat'}
-                  isRtl={isRtl}
-                />
-
-                <RateItemCard
-                  title={isRtl ? 'أكياس أرز بسمتي (40 كجم)' : 'Rice Bags (40kg)'}
-                  description={isRtl ? 'الأرز الحضرمي للمندي والكبسة' : 'Rice sacks'}
-                  mode={rates.riceMode || 'ratio'}
-                  onModeChange={(m) => handleModeChange('riceMode', m)}
-                  ratioValue={rates.guestsPerRiceBag40kg || 150}
-                  onRatioChange={(v) => handleChange('guestsPerRiceBag40kg', v)}
-                  ratioUnitLabel={isRtl ? 'ضيف لكل كيس' : 'guests/bag'}
-                  fixedValue={rates.fixedRiceBags || 6}
-                  onFixedChange={(v) => handleChange('fixedRiceBags', v)}
-                  fixedUnitLabel={isRtl ? 'كيس أرز ثابت' : 'fixed bags'}
-                  isRtl={isRtl}
-                />
-
-                <RateItemCard
-                  title={isRtl ? 'كراتين زيت وسمن الطهي' : 'Cooking Oil Cartons'}
-                  description={isRtl ? 'المصنعية وإعداد قدور الأرز' : 'Cooking oil & ghee'}
-                  mode={rates.oilMode || 'ratio'}
-                  onModeChange={(m) => handleModeChange('oilMode', m)}
-                  ratioValue={rates.cookingOilPerRiceBag || 1.5}
-                  onRatioChange={(v) => handleChange('cookingOilPerRiceBag', v)}
-                  ratioUnitLabel={isRtl ? 'كرتون لكل كيس أرز' : 'cartons/rice bag'}
-                  fixedValue={rates.fixedOilCartons || 9}
-                  onFixedChange={(v) => handleChange('fixedOilCartons', v)}
-                  fixedUnitLabel={isRtl ? 'كرتون زيت ثابت' : 'fixed oil cartons'}
-                  isRtl={isRtl}
-                />
-
-                <div className="sm:col-span-2">
-                  <RateItemCard
-                    title={isRtl ? 'بهارات مشكلة وتوابل' : 'Spices & Seasoning'}
-                    description={isRtl ? 'خلطة بهارات اللحم والأرز' : 'Banquet spices'}
-                    mode={rates.spicesMode || 'ratio'}
-                    onModeChange={(m) => handleModeChange('spicesMode', m)}
-                    ratioValue={rates.spicesPerSheepKg || 1.2}
-                    onRatioChange={(v) => handleChange('spicesPerSheepKg', v)}
-                    ratioUnitLabel={isRtl ? 'كجم لكل ذبيحة' : 'kg/sheep'}
-                    fixedValue={rates.fixedSpicesKg || 28}
-                    onFixedChange={(v) => handleChange('fixedSpicesKg', v)}
-                    fixedUnitLabel={isRtl ? 'كجم بهارات ثابت' : 'fixed kg spices'}
-                    isRtl={isRtl}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: TEA & SAMOVAR (ضيافة الشاهي وفريق عدة الشاي والسموار) */}
-          {activeTab === 'tea' && (
-            <div className="space-y-3 text-xs">
-              <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-2xl text-[11px] text-amber-900 leading-relaxed flex items-center justify-between">
-                <span>{isRtl ? '☕ تخصيص عدة الشاي والسموارات وفريق عدة الشاي بنسب الحضور أو كميات مقطوعة.' : 'Configure tea kit team and samovars with ratio or fixed amounts.'}</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <RateItemCard
-                  title={isRtl ? 'فريق عدة الشاي (صبابين ومعدين)' : 'Tea Crew (Brewers & Pourers)'}
-                  description={isRtl ? 'الفريق المتفرغ لصب وإعداد الشاهي' : 'Tea hospitality crew'}
-                  mode={rates.teaTeamMode || 'ratio'}
-                  onModeChange={(m) => handleModeChange('teaTeamMode', m)}
-                  ratioValue={rates.guestsPerTeaMember || 70}
-                  onRatioChange={(v) => handleChange('guestsPerTeaMember', v)}
-                  ratioUnitLabel={isRtl ? 'ضيف لكل فرد' : 'guests/crew'}
-                  fixedValue={rates.fixedTeaTeamSize || 16}
-                  onFixedChange={(v) => handleChange('fixedTeaTeamSize', v)}
-                  fixedUnitLabel={isRtl ? 'أفراد بعدة الشاي ثابت' : 'fixed crew'}
-                  isRtl={isRtl}
-                />
-
-                <RateItemCard
-                  title={isRtl ? 'أواني السموار للتخدير (السموارات)' : 'Samovars (السموار)'}
-                  description={isRtl ? 'أواني وقدور التخدير الكبرى بالفحم' : 'Brewing samovars'}
-                  mode={rates.samovarsMode || 'ratio'}
-                  onModeChange={(m) => handleModeChange('samovarsMode', m)}
-                  ratioValue={rates.guestsPerSamovar || 250}
-                  onRatioChange={(v) => handleChange('guestsPerSamovar', v)}
-                  ratioUnitLabel={isRtl ? 'ضيف لكل سموار' : 'guests/samovar'}
-                  fixedValue={rates.fixedSamovarsCount || 4}
-                  onFixedChange={(v) => handleChange('fixedSamovarsCount', v)}
-                  fixedUnitLabel={isRtl ? 'سموار تخدير ثابت' : 'fixed samovars'}
-                  isRtl={isRtl}
-                />
-
-                <RateItemCard
-                  title={isRtl ? 'برادات ودلال الصب المتنقلة' : 'Serving Kettles'}
-                  description={isRtl ? 'دلال التوزيع بين الصفوف والمخادر' : 'Serving kettles'}
-                  mode={rates.servingKettlesMode || 'ratio'}
-                  onModeChange={(m) => handleModeChange('servingKettlesMode', m)}
-                  ratioValue={rates.guestsPerServingKettle || 60}
-                  onRatioChange={(v) => handleChange('guestsPerServingKettle', v)}
-                  ratioUnitLabel={isRtl ? 'ضيف لكل دلة' : 'guests/kettle'}
-                  fixedValue={rates.fixedServingKettles || 14}
-                  onFixedChange={(v) => handleChange('fixedServingKettles', v)}
-                  fixedUnitLabel={isRtl ? 'دلال وبرادات ثابتة' : 'fixed kettles'}
-                  isRtl={isRtl}
-                />
-
-                <RateItemCard
-                  title={isRtl ? 'أكياس السكر (50 كجم)' : 'Sugar Sacks (50kg)'}
-                  description={isRtl ? 'سكر الشاهي الأحمر والعدني' : 'Sugar sacks'}
-                  mode={rates.sugarMode || 'ratio'}
-                  onModeChange={(m) => handleModeChange('sugarMode', m)}
-                  ratioValue={rates.guestsPerSugarBag50kg || 400}
-                  onRatioChange={(v) => handleChange('guestsPerSugarBag50kg', v)}
-                  ratioUnitLabel={isRtl ? 'ضيف لكل كيس' : 'guests/sack'}
-                  fixedValue={rates.fixedSugarBags || 3}
-                  onFixedChange={(v) => handleChange('fixedSugarBags', v)}
-                  fixedUnitLabel={isRtl ? 'كيس سكر 50 كجم ثابت' : 'fixed sugar sacks'}
-                  isRtl={isRtl}
-                />
-
-                <RateItemCard
-                  title={isRtl ? 'الشاي السيلاني الفاخر بالكيلو' : 'Ceylon Tea Leaves (Kg)'}
-                  description={isRtl ? 'شاي أحمر كبوس أو سيلاني ممتاز' : 'Tea leaves'}
-                  mode={rates.teaLeavesMode || 'ratio'}
-                  onModeChange={(m) => handleModeChange('teaLeavesMode', m)}
-                  ratioValue={rates.teaKgPerGuest || 0.025}
-                  onRatioChange={(v) => handleChange('teaKgPerGuest', v)}
-                  ratioUnitLabel={isRtl ? 'كجم لكل ضيف' : 'kg/guest'}
-                  fixedValue={rates.fixedTeaLeavesKg || 25}
-                  onFixedChange={(v) => handleChange('fixedTeaLeavesKg', v)}
-                  fixedUnitLabel={isRtl ? 'كجم شاي ثابت' : 'fixed tea kg'}
-                  isRtl={isRtl}
-                />
-
-                <RateItemCard
-                  title={isRtl ? 'صينيات توزيع الشاي' : 'Tea Serving Trays'}
-                  description={isRtl ? 'صواني حمل الفناجين بين الصفوف والمخادر' : 'Serving trays'}
-                  mode={rates.teaTraysMode || 'ratio'}
-                  onModeChange={(m) => handleModeChange('teaTraysMode', m)}
-                  ratioValue={rates.guestsPerTeaTray || 50}
-                  onRatioChange={(v) => handleChange('guestsPerTeaTray', v)}
-                  ratioUnitLabel={isRtl ? 'ضيف لكل صينية' : 'guests/tray'}
-                  fixedValue={rates.fixedTeaTrays || 18}
-                  onFixedChange={(v) => handleChange('fixedTeaTrays', v)}
-                  fixedUnitLabel={isRtl ? 'صينية تقديم ثابتة' : 'fixed trays'}
-                  isRtl={isRtl}
-                />
-
-                <RateItemCard
-                  title={isRtl ? 'فناجين واستكانات الشاي' : 'Tea Cups & Glasses'}
-                  description={isRtl ? 'فناجين واستكانات تقديم الشاهي' : 'Glass tea cups & saucers'}
-                  mode={rates.teaCupsMode || 'ratio'}
-                  onModeChange={(m) => handleModeChange('teaCupsMode', m)}
-                  ratioValue={rates.teaCupsMultiplier || 1.5}
-                  onRatioChange={(v) => handleChange('teaCupsMultiplier', v)}
-                  ratioUnitLabel={isRtl ? 'فنجان لكل ضيف' : 'cups/guest'}
-                  fixedValue={rates.fixedTeaCups || 1200}
-                  onFixedChange={(v) => handleChange('fixedTeaCups', v)}
-                  fixedUnitLabel={isRtl ? 'فنجان شاي ثابت' : 'fixed tea cups'}
-                  isRtl={isRtl}
-                />
-
-                <div className="sm:col-span-2">
-                  <RateItemCard
-                    title={isRtl ? 'أكياس الفحم الطبيعي للسموارات' : 'Charcoal Sacks'}
-                    description={isRtl ? 'فحم طبيعي لإشعال السموارات طوال اليوم' : 'Charcoal for samovars'}
-                    mode={rates.charcoalMode || 'ratio'}
-                    onModeChange={(m) => handleModeChange('charcoalMode', m)}
-                    ratioValue={rates.charcoalBagsPerSamovar || 2.5}
-                    onRatioChange={(v) => handleChange('charcoalBagsPerSamovar', v)}
-                    ratioUnitLabel={isRtl ? 'أكياس فحم لكل سموار' : 'bags/samovar'}
-                    fixedValue={rates.fixedCharcoalBags || 10}
-                    onFixedChange={(v) => handleChange('fixedCharcoalBags', v)}
-                    fixedUnitLabel={isRtl ? 'أكياس فحم ثابتة' : 'fixed charcoal sacks'}
-                    isRtl={isRtl}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: WATER & HYDRATION (سقيا الماء البارد) */}
-          {activeTab === 'water' && (
-            <div className="space-y-3 text-xs">
-              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-2xl text-[11px] text-blue-900 leading-relaxed flex items-center justify-between">
-                <span>{isRtl ? '💧 ضبط برادات وترامس المياه الباردة، قوالب الثلج، والكراتين بنسب أو كميات مقطوعة.' : 'Water dispensers, ice blocks, and bottled water rations.'}</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <RateItemCard
-                  title={isRtl ? 'برادات وترامس كبرى (60-80L)' : 'Large Water Dispensers'}
-                  description={isRtl ? 'نقاط الشرب الباردة بالساحة' : 'Coolers & dispensers'}
-                  mode={rates.waterDispensersMode || 'ratio'}
-                  onModeChange={(m) => handleModeChange('waterDispensersMode', m)}
-                  ratioValue={rates.guestsPerWaterDispenser || 75}
-                  onRatioChange={(v) => handleChange('guestsPerWaterDispenser', v)}
-                  ratioUnitLabel={isRtl ? 'ضيف لكل براد' : 'guests/dispenser'}
-                  fixedValue={rates.fixedWaterDispensers || 12}
-                  onFixedChange={(v) => handleChange('fixedWaterDispensers', v)}
-                  fixedUnitLabel={isRtl ? 'براد وترمس ثابت' : 'fixed dispensers'}
-                  isRtl={isRtl}
-                />
-
-                <RateItemCard
-                  title={isRtl ? 'قوالب الثلج المقررة للتبريد' : 'Ice Blocks Allocated'}
-                  description={isRtl ? 'ثلج نقي لتبريد البرادات طوال اليوم' : 'Ice blocks'}
-                  mode={rates.iceBlocksMode || 'ratio'}
-                  onModeChange={(m) => handleModeChange('iceBlocksMode', m)}
-                  ratioValue={rates.iceBlocksPerDispenser || 3}
-                  onRatioChange={(v) => handleChange('iceBlocksPerDispenser', v)}
-                  ratioUnitLabel={isRtl ? 'قوالب ثلج لكل براد' : 'blocks/dispenser'}
-                  fixedValue={rates.fixedIceBlocks || 36}
-                  onFixedChange={(v) => handleChange('fixedIceBlocks', v)}
-                  fixedUnitLabel={isRtl ? 'قالب ثلج ثابت' : 'fixed ice blocks'}
-                  isRtl={isRtl}
-                />
-
-                <RateItemCard
-                  title={isRtl ? 'كراتين مياه مبردة معبأة' : 'Bottled Water Cartons'}
-                  description={isRtl ? 'عبوات مياه معبأة للمنصة والضيوف' : 'Bottled water'}
-                  mode={rates.bottledWaterMode || 'ratio'}
-                  onModeChange={(m) => handleModeChange('bottledWaterMode', m)}
-                  ratioValue={rates.guestsPerBottledCarton || 25}
-                  onRatioChange={(v) => handleChange('guestsPerBottledCarton', v)}
-                  ratioUnitLabel={isRtl ? 'ضيف لكل كرتون' : 'guests/carton'}
-                  fixedValue={rates.fixedBottledWaterCartons || 40}
-                  onFixedChange={(v) => handleChange('fixedBottledWaterCartons', v)}
-                  fixedUnitLabel={isRtl ? 'كرتون مياه ثابت' : 'fixed cartons'}
-                  isRtl={isRtl}
-                />
-
-                <RateItemCard
-                  title={isRtl ? 'أكواب شرب بلاستيكية/ورقية' : 'Drinking Cups'}
-                  description={isRtl ? 'أكواب توزيع الماء' : 'Drinking cups'}
-                  mode={rates.cupsMode || 'ratio'}
-                  onModeChange={(m) => handleModeChange('cupsMode', m)}
-                  ratioValue={rates.cupsPerGuestMultiplier || 2.0}
-                  onRatioChange={(v) => handleChange('cupsPerGuestMultiplier', v)}
-                  ratioUnitLabel={isRtl ? 'أكواب لكل ضيف' : 'cups/guest'}
-                  fixedValue={rates.fixedCups || 2000}
-                  onFixedChange={(v) => handleChange('fixedCups', v)}
-                  fixedUnitLabel={isRtl ? 'كوب شرب ثابت' : 'fixed cups'}
-                  isRtl={isRtl}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* TAB 4: VENUE, TENTS & CARPETS (المخادر والخيام والفرش - مخصص مستقل) */}
-          {activeTab === 'venue' && (
-            <div className="space-y-3 text-xs">
-              <div className="p-3 bg-amber-50/70 border border-amber-300 rounded-2xl text-[11px] text-amber-950 leading-relaxed flex items-center justify-between">
-                <span>{isRtl ? '🎪 قسم فرش الساحات، السجاد التقليدي، مساحة المظلات والخيام، ومراوح التبريد.' : 'Tents, carpets, shaded pavilion area, and cooler misting fans.'}</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <RateItemCard
-                  title={isRtl ? 'سجاد تقليدي كبير (4×3 م)' : 'Traditional Carpets'}
-                  description={isRtl ? 'فرش مجالس المخادر والساحة' : 'Traditional ground carpets'}
-                  mode={rates.carpetsMode || 'ratio'}
-                  onModeChange={(m) => handleModeChange('carpetsMode', m)}
-                  ratioValue={rates.guestsPerCarpet || 11}
-                  onRatioChange={(v) => handleChange('guestsPerCarpet', v)}
-                  ratioUnitLabel={isRtl ? 'ضيف لكل سجادة' : 'guests/carpet'}
-                  fixedValue={rates.fixedCarpets || 80}
-                  onFixedChange={(v) => handleChange('fixedCarpets', v)}
-                  fixedUnitLabel={isRtl ? 'سجادة تقليدية ثابتة' : 'fixed carpets'}
-                  isRtl={isRtl}
-                />
-
-                <RateItemCard
-                  title={isRtl ? 'مساحة المظلات والخيام والتظليل' : 'Tents & Shade Area (m²)'}
-                  description={isRtl ? 'تغطية الساحة من الشمس' : 'Covered ground area'}
-                  mode={rates.tentsMode || 'ratio'}
-                  onModeChange={(m) => handleModeChange('tentsMode', m)}
-                  ratioValue={rates.tentsSqMetersPerGuest || 1.4}
-                  onRatioChange={(v) => handleChange('tentsSqMetersPerGuest', v)}
-                  ratioUnitLabel={isRtl ? 'م² تظليل لكل ضيف' : 'sq m/guest'}
-                  fixedValue={rates.fixedTentsArea || 1200}
-                  onFixedChange={(v) => handleChange('fixedTentsArea', v)}
-                  fixedUnitLabel={isRtl ? 'م² مساحة مظلات ثابتة' : 'fixed sq meters'}
-                  isRtl={isRtl}
-                />
-
-                <div className="sm:col-span-2">
-                  <RateItemCard
-                    title={isRtl ? 'مراوح رذاذ وتبريد الساحة' : 'Misting Cooler Fans'}
-                    description={isRtl ? 'تلطيف الهواء في المخادر والساحات' : 'Outdoor cooling fans'}
-                    mode={rates.fansMode || 'ratio'}
-                    onModeChange={(m) => handleModeChange('fansMode', m)}
-                    ratioValue={rates.guestsPerCoolerFan || 50}
-                    onRatioChange={(v) => handleChange('guestsPerCoolerFan', v)}
-                    ratioUnitLabel={isRtl ? 'ضيف لكل مروحة' : 'guests/fan'}
-                    fixedValue={rates.fixedFans || 16}
-                    onFixedChange={(v) => handleChange('fixedFans', v)}
-                    fixedUnitLabel={isRtl ? 'مروحة تبريد ثابتة' : 'fixed cooler fans'}
-                    isRtl={isRtl}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-        </form>
-
-        {/* Pinned Sticky Footer */}
-        <div className="shrink-0 p-3 sm:p-4 border-t border-gray-100 bg-white flex items-center justify-between gap-2.5 z-10">
-          <button
-            type="button"
-            onClick={onReset}
-            className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl border border-gray-200 hover:bg-gray-100 text-gray-700 font-bold text-xs transition"
-          >
-            <RotateCcw size={14} />
-            <span className="hidden sm:inline">{isRtl ? 'استعادة الافتراضي' : 'Reset Defaults'}</span>
-            <span className="sm:hidden">{isRtl ? 'الافتراضي' : 'Reset'}</span>
-          </button>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-3.5 sm:px-4 py-2 rounded-xl border border-gray-200 font-bold text-xs text-gray-600 hover:bg-gray-50 transition"
-            >
-              {isRtl ? 'إلغاء' : 'Cancel'}
-            </button>
-
-            <button
-              type="submit"
-              form="edit-rates-form"
-              className="px-4 sm:px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-xs shadow-md transition"
-            >
-              {isRtl ? 'حفظ وتطبيق المعدلات ✓' : 'Save & Apply ✓'}
-            </button>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  );
-}
 
 // ==========================================
 // MODAL: ADD / EDIT CUSTOM SUPPLY ITEM
 // ==========================================
-function SupplyItemModal({ isOpen, onClose, editingItem, onSave, isRtl }) {
+function SupplyItemModal({ isOpen, onClose, editingItem, onSave, totalGuests = 0, isRtl }) {
   const [formData, setFormData] = useState({
     name: editingItem?.name || '',
-    category: editingItem?.category || 'teaHospitality',
+    category: editingItem?.category || 'food',
     unit: editingItem?.unit || (isRtl ? 'كرتون' : 'carton'),
     rateType: editingItem?.rateType || 'ratio',
     ratio: editingItem?.ratio || 50,
     fixedAmount: editingItem?.fixedAmount || 10,
     note: editingItem?.note || ''
   });
+
+  const previewQuantity = useMemo(() => {
+    if (formData.rateType === 'ratio') {
+      const r = Number(formData.ratio) || 1;
+      return totalGuests > 0 ? Math.ceil(totalGuests / r) : 0;
+    }
+    return Number(formData.fixedAmount) || 0;
+  }, [formData.rateType, formData.ratio, formData.fixedAmount, totalGuests]);
 
   if (!isOpen) return null;
 
@@ -2978,7 +2215,59 @@ function SupplyItemModal({ isOpen, onClose, editingItem, onSave, isRtl }) {
           </button>
         </div>
 
+        {/* Live Calculation Preview Banner */}
+        <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200/90 flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-bold text-amber-900 block">
+              {isRtl ? 'الكمية المحسوبة حالياً:' : 'Current Calculated Quantity:'}
+            </span>
+            <span className="text-[10px] text-gray-500">
+              {formData.rateType === 'ratio'
+                ? (isRtl ? `بناءً على ${totalGuests.toLocaleString()} ضيف` : `Based on ${totalGuests.toLocaleString()} guests`)
+                : (isRtl ? 'كمية مقطوعة ثابتة' : 'Fixed quantity')}
+            </span>
+          </div>
+          <div className="text-sm sm:text-base font-black text-amber-900 bg-white px-3 py-1 rounded-xl border border-amber-200 shadow-2xs">
+            {previewQuantity.toLocaleString()} <span className="text-xs text-gray-600 font-bold">{formData.unit || (isRtl ? 'وحدة' : 'units')}</span>
+          </div>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+
+          {/* Quick Preset Item Pills */}
+          {!editingItem && (
+            <div>
+              <span className="text-[10px] text-gray-400 block mb-1 font-bold">
+                {isRtl ? 'أو اختر اقتراحاً سريعاً لملء البيانات:' : 'Quick Select:'}
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { name: isRtl ? 'ذبائح غنم للوليمة' : 'Feast Sheep', category: 'food', unit: isRtl ? 'رأس' : 'head', rateType: 'ratio', ratio: 16 },
+                  { name: isRtl ? 'أرز بسمتي (40 كجم)' : 'Rice Sacks', category: 'food', unit: isRtl ? 'كيس' : 'sack', rateType: 'ratio', ratio: 150 },
+                  { name: isRtl ? 'فريق عدة الشاي' : 'Tea Crew', category: 'teaHospitality', unit: isRtl ? 'فرد' : 'crew', rateType: 'ratio', ratio: 70 },
+                  { name: isRtl ? 'برادات مياه كبيرة' : 'Water Dispensers', category: 'hydration', unit: isRtl ? 'براد' : 'dispenser', rateType: 'ratio', ratio: 75 },
+                  { name: isRtl ? 'قوالب ثلج' : 'Ice Blocks', category: 'hydration', unit: isRtl ? 'قالب' : 'block', rateType: 'ratio', ratio: 25 },
+                  { name: isRtl ? 'سجاد ومفارش' : 'Carpets', category: 'venue', unit: isRtl ? 'سجادة' : 'carpet', rateType: 'ratio', ratio: 11 },
+                ].map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() => setFormData((prev) => ({
+                      ...prev,
+                      name: preset.name,
+                      category: preset.category,
+                      unit: preset.unit,
+                      rateType: preset.rateType,
+                      ratio: preset.ratio
+                    }))}
+                    className="text-[10px] px-2 py-0.5 rounded-lg bg-gray-100 hover:bg-amber-100 hover:text-amber-900 text-gray-600 transition font-bold border border-gray-200"
+                  >
+                    + {preset.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block font-bold text-gray-700 mb-1">
@@ -2987,7 +2276,7 @@ function SupplyItemModal({ isOpen, onClose, editingItem, onSave, isRtl }) {
             <input
               type="text"
               required
-              placeholder={isRtl ? 'مثال: كراتين زبادي، مجامر بخور وعود، فناجين خاصة...' : 'e.g. Incense burners, Yogurt cartons...'}
+              placeholder={isRtl ? 'مثال: ذبائح غنم، كراتين زيت، برادات ماء...' : 'e.g. Feast sheep, Cooking oil...'}
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold"
@@ -3002,8 +2291,8 @@ function SupplyItemModal({ isOpen, onClose, editingItem, onSave, isRtl }) {
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold"
               >
-                <option value="teaHospitality">{isRtl ? 'عدة الشاي والسموار' : 'Tea Hospitality'}</option>
                 <option value="food">{isRtl ? 'وليمة وإطعام' : 'Food & Feast'}</option>
+                <option value="teaHospitality">{isRtl ? 'عدة الشاي والسموار' : 'Tea Hospitality'}</option>
                 <option value="hydration">{isRtl ? 'سقيا الماء' : 'Water & Hydration'}</option>
                 <option value="venue">{isRtl ? 'الساحة والمخادر' : 'Venue & Setup'}</option>
                 <option value="general">{isRtl ? 'عامة' : 'General'}</option>
@@ -3011,11 +2300,25 @@ function SupplyItemModal({ isOpen, onClose, editingItem, onSave, isRtl }) {
             </div>
 
             <div>
-              <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'وحدة القياس' : 'Unit'}</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-bold text-gray-700">{isRtl ? 'وحدة القياس' : 'Unit'}</label>
+                <div className="flex flex-wrap gap-1">
+                  {['رأس', 'كيس', 'كرتون', 'براد', 'سجادة', 'كجم'].map((u) => (
+                    <button
+                      key={u}
+                      type="button"
+                      onClick={() => setFormData((prev) => ({ ...prev, unit: u }))}
+                      className="text-[9px] px-1 py-0.2 rounded bg-gray-100 hover:bg-amber-100 text-gray-600 hover:text-amber-800 transition font-bold"
+                    >
+                      {u}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <input
                 type="text"
                 required
-                placeholder={isRtl ? 'كرتون / طقم / حبة...' : 'carton / set...'}
+                placeholder={isRtl ? 'كرتون / رأس / كيس / براد...' : 'carton / head / sack...'}
                 value={formData.unit}
                 onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                 className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold"
