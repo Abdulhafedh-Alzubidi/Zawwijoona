@@ -18,6 +18,8 @@ import MassWeddingDashboard from './components/MassWeddingDashboard';
 import MassWeddingSetupModal from './components/MassWeddingSetupModal';
 import MassWeddingSetupScreen from './components/MassWeddingSetupScreen';
 import { DEFAULT_MASS_WEDDING_DATA } from './data/massWeddingTemplates';
+import CommitteePortalView from './components/CommitteePortalView';
+import { decodeCommitteePortalData } from './utils/portalHelpers';
 
 // --- Dictionary for Bilingual Support ---
 const dict = {
@@ -601,6 +603,11 @@ export default function App() {
 
   const handleUpdateMassWeddingData = async (newMassData) => {
     setMassWeddingData(newMassData);
+    try {
+      localStorage.setItem('maraseem_latest_mass_wedding_data', JSON.stringify(newMassData));
+    } catch (e) {
+      console.warn("فشل حفظ نسخة العرس الجماعي للبوابات:", e);
+    }
     await saveUserField('massWeddingData', newMassData);
   };
 
@@ -1854,6 +1861,57 @@ export default function App() {
       </div>
     );
   };
+
+  // --- التحقق من طلب بوابة اللجنة الميدانية المستقلة (وصول فوري للأعضاء والمتطوعين عبر واتساب) ---
+  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const isPortalRequested = urlParams && (urlParams.get('portal') === 'committee' || !!urlParams.get('committeeId'));
+  const portalCommitteeId = urlParams ? urlParams.get('committeeId') : null;
+  const portalCdata = urlParams ? urlParams.get('cdata') : null;
+
+  if (isPortalRequested) {
+    let portalCommittee = decodeCommitteePortalData(portalCdata);
+    let weddingTitle = 'العرس الجماعي الخيري';
+    let weddingDate = '';
+    let organizer = 'اللجنة العليا المنظمة';
+
+    if (portalCommittee) {
+      weddingTitle = portalCommittee.weddingTitle || weddingTitle;
+      weddingDate = portalCommittee.weddingDate || weddingDate;
+      organizer = portalCommittee.organizer || organizer;
+    } else {
+      const findInList = (list) => (list || []).find((c) => c.id === portalCommitteeId);
+      portalCommittee = findInList(massWeddingData?.committees);
+      if (!portalCommittee) {
+        try {
+          const cached = localStorage.getItem('maraseem_latest_mass_wedding_data');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            portalCommittee = findInList(parsed?.committees);
+            if (parsed?.info) {
+              weddingTitle = parsed.info.title || weddingTitle;
+              weddingDate = parsed.info.date || weddingDate;
+              organizer = parsed.info.organizer || organizer;
+            }
+          }
+        } catch (e) {
+          console.warn(e);
+        }
+      }
+    }
+
+    if (portalCommittee) {
+      return (
+        <CommitteePortalView
+          committee={portalCommittee}
+          weddingTitle={weddingTitle}
+          weddingDate={weddingDate}
+          organizer={organizer}
+          isStandalone={true}
+          isRtl={isRtl}
+        />
+      );
+    }
+  }
 
   // Auth loading check
   if (isAuthLoading) {

@@ -7,13 +7,17 @@ import {
   Phone, Share2, Copy, Check, Filter, ArrowUpRight, ShieldCheck,
   Building2, Coins, Droplets, Coffee, Flame, Tent, Award,
   FileText, MessageSquare, ChevronRight, Edit3, Send, Loader2,
-  Sliders, RotateCcw, X, Edit2
+  Sliders, RotateCcw, X, Edit2, Radio, QrCode as QrIcon, Eye
 } from 'lucide-react';
 import {
   calculateMassWeddingLogistics,
   DEFAULT_CALCULATOR_RATES,
   DEFAULT_CUSTOM_LOGISTICS_ITEMS
 } from '../data/massWeddingTemplates';
+import CommandBroadcastHub from './CommandBroadcastHub';
+import CommitteeQrModal from './CommitteeQrModal';
+import CommitteePortalView from './CommitteePortalView';
+import { generateCommitteePortalUrl } from '../utils/portalHelpers';
 
 export default function MassWeddingDashboard({
   data,
@@ -62,6 +66,12 @@ export default function MassWeddingDashboard({
   const [excelError, setExcelError] = useState('');
   const [newInlineTaskText, setNewInlineTaskText] = useState('');
   const [formDynamicTasks, setFormDynamicTasks] = useState(['']);
+
+  // --- Broadcast Hub, QR & Mobile Portal States ---
+  const [committeesSectionView, setCommitteesSectionView] = useState('list'); // 'list' | 'broadcast'
+  const [qrModalData, setQrModalData] = useState(null); // { committee, portalUrl }
+  const [portalPreviewCommittee, setPortalPreviewCommittee] = useState(null);
+  const [copiedPortalFor, setCopiedPortalFor] = useState(null);
 
   // --- Search & Filters ---
   const [coupleSearch, setCoupleSearch] = useState('');
@@ -420,6 +430,23 @@ export default function MassWeddingDashboard({
         setShowAddCommitteeModal(false);
       }
     }
+  };
+
+  const handleCopyCommitteePortal = async (committee) => {
+    const url = generateCommitteePortalUrl(committee, weddingInfo);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedPortalFor(committee.id);
+      setTimeout(() => setCopiedPortalFor(null), 2500);
+    } catch {
+      setCopiedPortalFor(committee.id);
+      setTimeout(() => setCopiedPortalFor(null), 2500);
+    }
+  };
+
+  const handleOpenQrModal = (committee) => {
+    const url = generateCommitteePortalUrl(committee, weddingInfo);
+    setQrModalData({ committee, portalUrl: url });
   };
 
   // --- Handlers: Sponsors & Expenses ---
@@ -1378,11 +1405,69 @@ export default function MassWeddingDashboard({
                   <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                     <button
                       type="button"
+                      onClick={() => handleOpenQrModal(activeCommittee)}
+                      className="flex items-center gap-2 px-3.5 py-2.5 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-xl font-black text-xs transition shadow-sm"
+                      title={isRtl ? 'توليد وعرض رمز QR لبوابة اللجنة' : 'Generate QR Code'}
+                    >
+                      <QrIcon size={15} />
+                      <span>{isRtl ? '🏁 رمز QR والبوابة' : 'QR & Portal'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setPortalPreviewCommittee(activeCommittee)}
+                      className="flex items-center gap-2 px-3.5 py-2.5 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/25 transition shadow-sm"
+                      title={isRtl ? 'معاينة شكل البوابة في هاتف العضو' : 'Mobile Preview'}
+                    >
+                      <Eye size={15} />
+                      <span>{isRtl ? '📱 معاينة الجوال' : 'Mobile View'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopyCommitteePortal(activeCommittee)}
+                      className="flex items-center gap-2 px-3.5 py-2.5 bg-white/15 hover:bg-white/25 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/20 transition shadow-sm"
+                      title={isRtl ? 'نسخ رابط البوابة الميدانية المباشر' : 'Copy Portal Link'}
+                    >
+                      {copiedPortalFor === activeCommittee.id ? (
+                        <Check size={15} className="text-emerald-300" />
+                      ) : (
+                        <Copy size={15} />
+                      )}
+                      <span>
+                        {copiedPortalFor === activeCommittee.id
+                          ? (isRtl ? 'تم النسخ!' : 'Copied!')
+                          : (isRtl ? '🔗 نسخ الرابط' : 'Copy Link')}
+                      </span>
+                    </button>
+
+                    {activeCommittee.phone && (() => {
+                      const portalUrl = generateCommitteePortalUrl(activeCommittee, weddingInfo);
+                      const cleanP = activeCommittee.phone.replace(/[^0-9]/g, '');
+                      const msg = encodeURIComponent(
+                        `السلام عليكم أخي المشرف ${activeCommittee.leader || ''}،\nإليك رابط بوابة لجنتكم الميدانية (${activeCommittee.name}) في ${weddingInfo.title || 'العرس الجماعي'}:\n${portalUrl}\n\nيرجى مشاركته مع أعضاء فريقك للاطلاع على المهام وتفاصيل التواصل الميداني.`
+                      );
+                      return (
+                        <a
+                          href={`https://wa.me/${cleanP}?text=${msg}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-3.5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-xs transition shadow-sm"
+                          title={isRtl ? 'إرسال الرابط للمشرف مباشرة عبر واتساب' : 'Send via WhatsApp'}
+                        >
+                          <Share2 size={15} />
+                          <span>{isRtl ? '💬 إرسال للمشرف' : 'Send to Lead'}</span>
+                        </a>
+                      );
+                    })()}
+
+                    <button
+                      type="button"
                       onClick={() => setShowPdfReportModal(true)}
-                      className="flex items-center gap-2 px-4 py-2.5 bg-white/15 hover:bg-white/25 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/20 transition shadow-sm"
+                      className="flex items-center gap-2 px-3.5 py-2.5 bg-white/15 hover:bg-white/25 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/20 transition shadow-sm"
                     >
                       <Printer size={15} />
-                      <span>{isRtl ? '📄 طباعة وتصدير PDF' : 'Export PDF'}</span>
+                      <span>{isRtl ? '📄 تقرير PDF' : 'Export PDF'}</span>
                     </button>
 
                     <button
@@ -1393,10 +1478,10 @@ export default function MassWeddingDashboard({
                         setExcelFileName('');
                         setShowImportExcelModal(true);
                       }}
-                      className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/80 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs transition border border-emerald-400/40 shadow-sm"
+                      className="flex items-center gap-2 px-3.5 py-2.5 bg-emerald-500/80 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs transition border border-emerald-400/40 shadow-sm"
                     >
                       <FileSpreadsheet size={15} />
-                      <span>{isRtl ? '📊 رفع ملف إكسل (جملة)' : 'Import Excel'}</span>
+                      <span>{isRtl ? '📊 إكسل' : 'Excel'}</span>
                     </button>
 
                     <button
@@ -1405,10 +1490,10 @@ export default function MassWeddingDashboard({
                         setEditingMember(null);
                         setShowAddMemberModal(true);
                       }}
-                      className="flex items-center gap-2 px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-xl font-black text-xs transition shadow-sm"
+                      className="flex items-center gap-2 px-3.5 py-2.5 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-xl font-black text-xs transition shadow-sm"
                     >
                       <UserPlus size={15} />
-                      <span>{isRtl ? '➕ إضافة عضو' : 'Add Member'}</span>
+                      <span>{isRtl ? '➕ عضو' : 'Member'}</span>
                     </button>
 
                     <button
@@ -1717,7 +1802,48 @@ export default function MassWeddingDashboard({
 
         // --- VIEW 2: ALL COMMITTEES GRID VIEW ---
         return (
-          <div className="space-y-4">
+          <div className="space-y-5">
+
+            {/* Sub-tab Switcher: Committees Management vs Command Broadcast Hub */}
+            <div className="bg-white p-2 rounded-2xl border border-gray-200/80 shadow-xs flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCommitteesSectionView('list')}
+                className={`flex-1 py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition ${
+                  committeesSectionView === 'list'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <HeartHandshake size={16} />
+                <span>{isRtl ? `إدارة اللجان والفرق (${committees.length})` : `Committees Management (${committees.length})`}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCommitteesSectionView('broadcast')}
+                className={`flex-1 py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition ${
+                  committeesSectionView === 'broadcast'
+                    ? 'bg-emerald-700 text-white shadow-sm'
+                    : 'text-emerald-900 bg-emerald-50/70 hover:bg-emerald-100/70'
+                }`}
+              >
+                <Radio size={16} className={committeesSectionView === 'broadcast' ? 'animate-pulse' : ''} />
+                <span>{isRtl ? '📡 مركز البث والتوجيهات الميدانية (Command Hub)' : 'Field Broadcast Hub'}</span>
+              </button>
+            </div>
+
+            {committeesSectionView === 'broadcast' ? (
+              <CommandBroadcastHub
+                committees={committees}
+                weddingTitle={weddingInfo.title}
+                weddingDate={weddingInfo.date}
+                onOpenQrModal={(com, url) => setQrModalData({ committee: com, portalUrl: url })}
+                onOpenPortalPreview={(com) => setPortalPreviewCommittee(com)}
+                isRtl={isRtl}
+              />
+            ) : (
+              <div className="space-y-4">
 
             {/* Committees Specialized Hero Banner */}
             <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 text-white p-6 sm:p-7 shadow-lg">
@@ -1889,6 +2015,46 @@ export default function MassWeddingDashboard({
                         </div>
                       )}
 
+                      {/* Quick Portal & QR Action Strip */}
+                      <div
+                        className="pt-2 border-t border-gray-100 flex items-center justify-between gap-1 text-[11px]"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleCopyCommitteePortal(com)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold transition"
+                          title="نسخ رابط البوابة الميدانية"
+                        >
+                          {copiedPortalFor === com.id ? (
+                            <Check size={13} className="text-emerald-600" />
+                          ) : (
+                            <Copy size={13} />
+                          )}
+                          <span>{copiedPortalFor === com.id ? (isRtl ? 'تم النسخ!' : 'Copied!') : (isRtl ? 'نسخ الرابط' : 'Copy Link')}</span>
+                        </button>
+
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenQrModal(com)}
+                            className="p-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 transition"
+                            title={isRtl ? 'رمز QR وبوابة اللجنة' : 'QR Code'}
+                          >
+                            <QrIcon size={14} />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setPortalPreviewCommittee(com)}
+                            className="p-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-800 transition"
+                            title={isRtl ? 'معاينة بوابة الجوال' : 'Mobile Preview'}
+                          >
+                            <Eye size={14} />
+                          </button>
+                        </div>
+                      </div>
+
                       {/* Click invitation button */}
                       <div className="pt-2 border-t border-gray-50 flex items-center justify-between text-xs font-black text-blue-700 group-hover:text-blue-900">
                         <span>{isRtl ? 'إدارة الأعضاء وتصدير التقارير 📋' : 'Manage Members & Reports 📋'}</span>
@@ -1897,6 +2063,9 @@ export default function MassWeddingDashboard({
                     </div>
                   );
                 })}
+              </div>
+            )}
+
               </div>
             )}
 
@@ -3286,6 +3455,54 @@ export default function MassWeddingDashboard({
           </div>
         );
       })()}
+
+      {/* Modal: Committee QR Code & Sharing */}
+      {qrModalData && (
+        <CommitteeQrModal
+          isOpen={!!qrModalData}
+          onClose={() => setQrModalData(null)}
+          committee={qrModalData.committee}
+          weddingTitle={weddingInfo.title}
+          portalUrl={qrModalData.portalUrl}
+          isRtl={isRtl}
+        />
+      )}
+
+      {/* Modal: Mobile Portal In-App Preview (محاكاة هاتف العضو الميداني) */}
+      {portalPreviewCommittee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+          <div className="bg-slate-900 rounded-[36px] sm:rounded-[44px] shadow-2xl max-w-sm w-full overflow-hidden border-4 border-slate-700 max-h-[92vh] flex flex-col relative">
+            {/* Phone Top Notch / Header */}
+            <div className="bg-slate-950 px-4 py-2.5 flex items-center justify-between text-white border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span className="text-[11px] font-bold text-gray-300">معاينة هاتف العضو الميداني</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPortalPreviewCommittee(null)}
+                className="p-1 rounded-full bg-white/10 hover:bg-white/20 text-white transition"
+                title="إغلاق المعاينة"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Scrollable View */}
+            <div className="flex-1 overflow-y-auto bg-slate-100">
+              <CommitteePortalView
+                committee={portalPreviewCommittee}
+                weddingTitle={weddingInfo.title}
+                weddingDate={weddingInfo.date}
+                organizer={weddingInfo.organizer}
+                onBack={() => setPortalPreviewCommittee(null)}
+                isStandalone={false}
+                isRtl={isRtl}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal 3: Add / Edit Sponsor */}
       {showAddSponsorModal && (
