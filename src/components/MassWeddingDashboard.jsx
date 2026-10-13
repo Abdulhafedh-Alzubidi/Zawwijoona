@@ -420,7 +420,13 @@ export default function MassWeddingDashboard({
   return (
     <div dir={isRtl ? 'rtl' : 'ltr'} className="space-y-6">
 
-      {/* --- 1. HERO BANNER --- */}
+      {/* --- SUB-TAB CONTENT SECTIONS --- */}
+
+      {/* === SUB-TAB 1: OVERVIEW === */}
+      {activeSubTab === 'overview' && (
+        <div className="space-y-6">
+
+          {/* --- 1. HERO BANNER --- */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-700 via-amber-800 to-orange-900 text-white p-6 sm:p-8 shadow-xl">
         <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/5 rounded-full blur-2xl pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-64 h-64 bg-orange-500/10 rounded-full blur-2xl pointer-events-none"></div>
@@ -618,11 +624,6 @@ export default function MassWeddingDashboard({
 
       </div>
 
-      {/* --- SUB-TAB CONTENT SECTIONS --- */}
-
-      {/* === SUB-TAB 1: OVERVIEW === */}
-      {activeSubTab === 'overview' && (
-        <div className="space-y-6">
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
@@ -819,7 +820,61 @@ export default function MassWeddingDashboard({
 
       {/* === SUB-TAB 2: COUPLES ROSTER === */}
       {activeSubTab === 'couples' && (
-        <div className="space-y-4">
+        <div className="space-y-6">
+
+          {/* Couples Specialized Hero Banner */}
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-700 via-orange-800 to-amber-900 text-white p-6 sm:p-7 shadow-lg">
+            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+
+            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="space-y-1.5 max-w-2xl">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20 text-amber-100">
+                  <Users2 size={14} />
+                  <span>{isRtl ? 'سجل العرسان والتوثيق الميداني' : 'Couples Roster & Verification'}</span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+                  <span>{isRtl ? 'سجل العرسان واعتماد العقود والفحوصات' : 'Registered Couples & Approvals'}</span>
+                </h3>
+                <p className="text-xs sm:text-sm text-amber-100/90 leading-relaxed">
+                  {isRtl
+                    ? `إدارة بيانات العرسان المشاركين (${couples.length} عريس مسجل من أصل ${weddingInfo.targetCouples || 24} مستهدف)، ومتابعة الفحوصات الطبية واعتماد عقود القران وتوزيع بطاقات الدعوة.`
+                    : `Manage registered couples (${couples.length} of ${weddingInfo.targetCouples || 24} target), medical test progress, legal contracts, and invitation quotas.`}
+                </p>
+              </div>
+
+              {/* Action Button */}
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setEditingCouple(null); setShowAddCoupleModal(true); }}
+                  className="flex items-center gap-2 px-5 py-3 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-2xl font-black text-xs sm:text-sm shadow-md transition"
+                >
+                  <Plus size={18} />
+                  <span>{isRtl ? '➕ تسجيل عريس جديد' : 'Register New Couple'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Stats Strip */}
+            <div className="mt-5 pt-4 border-t border-white/20 flex flex-wrap items-center gap-2.5 text-xs font-bold text-amber-100">
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                💍 <span>{isRtl ? 'إجمالي العرسان:' : 'Total Couples:'}</span>
+                <strong className="text-white font-black">{couples.length} / {weddingInfo.targetCouples || 24}</strong>
+              </span>
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                🩺 <span>{isRtl ? 'مكتمل الفحص الطبي:' : 'Medical Ready:'}</span>
+                <strong className="text-emerald-300 font-black">{couples.filter(c => c.medicalStatus === 'completed').length}</strong>
+              </span>
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                📜 <span>{isRtl ? 'معتمد عقد القران:' : 'Contracts Approved:'}</span>
+                <strong className="text-amber-200 font-black">{couples.filter(c => c.contractStatus === 'completed').length}</strong>
+              </span>
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                👥 <span>{isRtl ? 'معازيم العرسان المقدرين:' : 'Couples Guests:'}</span>
+                <strong className="text-white font-black">{(logistics.couplesGuests || 0).toLocaleString()}</strong>
+              </span>
+            </div>
+          </div>
 
           {/* Header Controls */}
           <div className="bg-white p-4 sm:p-6 rounded-3xl border border-gray-200/80 shadow-sm flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between">
@@ -1021,24 +1076,54 @@ export default function MassWeddingDashboard({
       {activeSubTab === 'committees' && (
         <div className="space-y-4">
 
-          <div className="bg-white p-4 sm:p-6 rounded-3xl border border-gray-200/80 shadow-sm flex items-center justify-between">
-            <div>
-              <h3 className="text-base sm:text-lg font-black text-gray-900">
-                {isRtl ? 'اللجان التنظيمية والفرق الميدانية' : 'Organizing Committees & Field Teams'}
-              </h3>
-              <p className="text-xs text-gray-500">
-                {isRtl ? 'توزيع المهام والمسؤولين والمتطوعين لإدارة ساحات الحفل والوليمة والشاهي' : 'Assign duties, leads, and volunteers across venue logistics and catering'}
-              </p>
+          {/* Committees Specialized Hero Banner */}
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 text-white p-6 sm:p-7 shadow-lg">
+            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+
+            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="space-y-1.5 max-w-2xl">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20 text-blue-100">
+                  <HeartHandshake size={14} />
+                  <span>{isRtl ? 'اللجان التنظيمية والفرق الميدانية' : 'Field Committees & Teams'}</span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+                  <span>{isRtl ? 'إدارة اللجان والفرق الميدانية والمتطوعين' : 'Committees, Leads & Volunteers'}</span>
+                </h3>
+                <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed">
+                  {isRtl
+                    ? `توزيع المهام والمسؤولين والفرق الميدانية (${committees.length} لجان، و ${totalVolunteers} متطوع ميداني) لتنظيم استقبال الضيوف، إعداد الوليمة والشاهي، وتأمين ساحات الحفل.`
+                    : `Organize field teams (${committees.length} committees, ${totalVolunteers} volunteers) to supervise guest reception, feast logistics, and venue order.`}
+                </p>
+              </div>
+
+              {/* Action Button */}
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setEditingCommittee(null); setShowAddCommitteeModal(true); }}
+                  className="flex items-center gap-2 px-5 py-3 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-2xl font-black text-xs sm:text-sm shadow-md transition"
+                >
+                  <Plus size={18} />
+                  <span>{isRtl ? '➕ إضافة لجنة تنظيمية' : 'Add Committee'}</span>
+                </button>
+              </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => { setEditingCommittee(null); setShowAddCommitteeModal(true); }}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs sm:text-sm shadow-md transition"
-            >
-              <Plus size={16} />
-              <span>{isRtl ? 'إضافة لجنة تنظيمية' : 'Add Committee'}</span>
-            </button>
+            {/* Quick Stats Strip */}
+            <div className="mt-5 pt-4 border-t border-white/20 flex flex-wrap items-center gap-2.5 text-xs font-bold text-blue-100">
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                👥 <span>{isRtl ? 'إجمالي اللجان:' : 'Total Committees:'}</span>
+                <strong className="text-white font-black">{committees.length}</strong>
+              </span>
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                🤝 <span>{isRtl ? 'المتطوعين الميدانيين:' : 'Volunteers:'}</span>
+                <strong className="text-amber-300 font-black">{totalVolunteers}</strong>
+              </span>
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                📋 <span>{isRtl ? 'مشرفي اللجان المعينين:' : 'Assigned Leads:'}</span>
+                <strong className="text-white font-black">{committees.filter(c => c.leader).length}</strong>
+              </span>
+            </div>
           </div>
 
           {committees.length === 0 ? (
@@ -1143,6 +1228,70 @@ export default function MassWeddingDashboard({
       {/* === SUB-TAB 4: BUDGET & SPONSORS === */}
       {activeSubTab === 'budget' && (
         <div className="space-y-6">
+
+          {/* Budget Specialized Hero Banner */}
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-800 via-teal-900 to-slate-900 text-white p-6 sm:p-7 shadow-lg">
+            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+
+            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="space-y-1.5 max-w-2xl">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20 text-emerald-100">
+                  <Coins size={14} />
+                  <span>{isRtl ? 'الميزانية والرعايات' : 'Budget & Sponsorships'}</span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+                  <span>{isRtl ? 'الموقف المالي وسجل الرعايات والمصروفات' : 'Financial Status, Sponsors & Costs'}</span>
+                </h3>
+                <p className="text-xs sm:text-sm text-emerald-100/90 leading-relaxed">
+                  {isRtl
+                    ? `متابعة إجمالي التبرعات والرعايات المجتمعية (${(totalSponsorships / 1000000).toFixed(2)} مليون ر.ي) مقابل المصروفات التقديرية (${(totalExpenses / 1000000).toFixed(2)} مليون ر.ي) وضبط الفائض والعجز.`
+                    : `Track total sponsorships and donations (${(totalSponsorships / 1000000).toFixed(2)}M YER) against estimated expenses (${(totalExpenses / 1000000).toFixed(2)}M YER).`}
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setEditingSponsor(null); setShowAddSponsorModal(true); }}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-emerald-400 hover:bg-emerald-300 text-emerald-950 rounded-2xl font-black text-xs sm:text-sm shadow-md transition"
+                >
+                  <Plus size={16} />
+                  <span>{isRtl ? 'تسجيل راعي / داعم' : 'Add Sponsor'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setEditingExpense(null); setShowAddExpenseModal(true); }}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-rose-500/80 hover:bg-rose-500 text-white rounded-2xl font-black text-xs sm:text-sm shadow-md transition border border-rose-400/40"
+                >
+                  <Plus size={16} />
+                  <span>{isRtl ? 'إضافة بند مصروف' : 'Add Expense'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Stats Strip */}
+            <div className="mt-5 pt-4 border-t border-white/20 flex flex-wrap items-center gap-2.5 text-xs font-bold text-emerald-100">
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                💰 <span>{isRtl ? 'إجمالي الرعايات:' : 'Total Raised:'}</span>
+                <strong className="text-emerald-300 font-black">{totalSponsorships.toLocaleString()} ر.ي</strong>
+              </span>
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                📉 <span>{isRtl ? 'إجمالي المصروفات:' : 'Total Costs:'}</span>
+                <strong className="text-rose-300 font-black">{totalExpenses.toLocaleString()} ر.ي</strong>
+              </span>
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                ⚖️ <span>{isRtl ? 'الفائض / العجز:' : 'Balance:'}</span>
+                <strong className={`${totalSponsorships >= totalExpenses ? 'text-emerald-300' : 'text-rose-300'} font-black`}>
+                  {(totalSponsorships - totalExpenses).toLocaleString()} ر.ي
+                </strong>
+              </span>
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                📊 <span>{isRtl ? 'نسبة التغطية:' : 'Budget Coverage:'}</span>
+                <strong className="text-white font-black">{budgetProgress}%</strong>
+              </span>
+            </div>
+          </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
@@ -1309,26 +1458,63 @@ export default function MassWeddingDashboard({
 
       {/* === SUB-TAB 5: UNIFIED CEREMONIES SCHEDULE === */}
       {activeSubTab === 'schedule' && (
-        <div className="bg-white p-6 rounded-3xl border border-gray-200/80 shadow-sm space-y-6">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-base sm:text-lg font-black text-gray-900">
-                {isRtl ? 'جدول برنامج ومراحل الفعاليات المشتركة' : 'Unified Ceremonies Timeline'}
-              </h3>
-              <p className="text-xs text-gray-500">
-                {isRtl ? 'تسلسل فعاليات يوم الزفاف من استقبال الوفود حتى السمرة الجماعية، اضغط على الحالة لتحديثها' : 'Chronological sequence of the day. Click status badge to cycle state.'}
-              </p>
+        <div className="space-y-6">
+
+          {/* Schedule Specialized Hero Banner */}
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-800 via-orange-900 to-stone-900 text-white p-6 sm:p-7 shadow-lg">
+            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+
+            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="space-y-1.5 max-w-2xl">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20 text-orange-100">
+                  <Calendar size={14} />
+                  <span>{isRtl ? 'برنامج وفعاليات الزفاف' : 'Ceremony Timeline'}</span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+                  <span>{isRtl ? 'جدول برنامج ومراحل الفعاليات المشتركة' : 'Unified Ceremonies Timeline'}</span>
+                </h3>
+                <p className="text-xs sm:text-sm text-orange-100/90 leading-relaxed">
+                  {isRtl
+                    ? `تنظيم التسلسل الزمني لفعاليات يوم الزفاف من استقبال الوفود حتى السمرة الجماعية، وتحديث حالات الفقرات الميدانية أولاً بأول.`
+                    : `Manage chronological event sequence from arrival to night celebrations, updating status on the go.`}
+                </p>
+              </div>
+
+              {/* Action Button */}
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setEditingScheduleItem(null); setShowScheduleModal(true); }}
+                  className="flex items-center gap-2 px-5 py-3 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-2xl font-black text-xs sm:text-sm shadow-md transition"
+                >
+                  <Plus size={18} />
+                  <span>{isRtl ? '➕ إضافة فعالية للبرنامج' : 'Add Event Item'}</span>
+                </button>
+              </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => { setEditingScheduleItem(null); setShowScheduleModal(true); }}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs sm:text-sm shadow-md transition shrink-0"
-            >
-              <Plus size={16} />
-              <span>{isRtl ? 'إضافة فعالية' : 'Add Event'}</span>
-            </button>
+            {/* Quick Stats Strip */}
+            <div className="mt-5 pt-4 border-t border-white/20 flex flex-wrap items-center gap-2.5 text-xs font-bold text-orange-100">
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                ⏱️ <span>{isRtl ? 'إجمالي الفقرات:' : 'Total Items:'}</span>
+                <strong className="text-white font-black">{schedule.length}</strong>
+              </span>
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                ✅ <span>{isRtl ? 'المكتملة:' : 'Completed:'}</span>
+                <strong className="text-emerald-300 font-black">{schedule.filter(s => s.status === 'completed').length}</strong>
+              </span>
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                ⏳ <span>{isRtl ? 'الجارية حالياً:' : 'Ongoing:'}</span>
+                <strong className="text-amber-300 font-black">{schedule.filter(s => s.status === 'ongoing').length}</strong>
+              </span>
+              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                🕒 <span>{isRtl ? 'القادمة:' : 'Upcoming:'}</span>
+                <strong className="text-white font-black">{schedule.filter(s => s.status === 'upcoming').length}</strong>
+              </span>
+            </div>
           </div>
+
+          <div className="bg-white p-6 rounded-3xl border border-gray-200/80 shadow-sm space-y-6">
 
           {schedule.length === 0 ? (
             <div className="p-10 rounded-2xl bg-gray-50 border border-dashed border-gray-200 text-center text-gray-400 space-y-3">
@@ -1418,6 +1604,7 @@ export default function MassWeddingDashboard({
           </div>
           )}
 
+        </div>
         </div>
       )}
 
@@ -1665,45 +1852,56 @@ export default function MassWeddingDashboard({
 
       {/* === SUB-TAB 7: AI MASS WEDDING ASSISTANT === */}
       {activeSubTab === 'ai' && (
-        <div className="bg-white p-6 rounded-3xl border border-gray-200/80 shadow-sm space-y-6">
+        <div className="space-y-6">
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-base sm:text-lg font-black text-gray-900 flex items-center gap-2">
-                <Sparkles size={20} className="text-amber-600" />
-                <span>{isRtl ? 'المساعد الذكي للأعراس الجماعية (الخطب والبيانات والتعاميم)' : 'AI Mass Wedding Assistant'}</span>
-              </h3>
-              <p className="text-xs text-gray-500">
-                {isRtl
-                  ? 'صياغة ذكية باللغة الحضرمية والفصحى للدعوات العامة، كلمة الحفل الافتتاحية، وتعاميم اللجان'
-                  : 'Generate public declarations, committee speeches, and operational task directives'}
-              </p>
-            </div>
+          {/* AI Specialized Hero Banner */}
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-purple-900 via-indigo-950 to-amber-950 text-white p-6 sm:p-7 shadow-lg">
+            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
 
-            <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-2xl text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => setAiPromptType('invitation')}
-                className={`px-3 py-1.5 rounded-xl transition ${aiPromptType === 'invitation' ? 'bg-white text-amber-700 shadow-sm' : 'text-gray-600'}`}
-              >
-                {isRtl ? 'بيان الدعوة العامة' : 'Public Invite'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setAiPromptType('speech')}
-                className={`px-3 py-1.5 rounded-xl transition ${aiPromptType === 'speech' ? 'bg-white text-amber-700 shadow-sm' : 'text-gray-600'}`}
-              >
-                {isRtl ? 'كلمة حفل اللجنة' : 'Keynote Speech'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setAiPromptType('directives')}
-                className={`px-3 py-1.5 rounded-xl transition ${aiPromptType === 'directives' ? 'bg-white text-amber-700 shadow-sm' : 'text-gray-600'}`}
-              >
-                {isRtl ? 'تعميم اللجان الميدانية' : 'Directives'}
-              </button>
+            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="space-y-1.5 max-w-2xl">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20 text-purple-200">
+                  <Sparkles size={14} className="text-amber-300" />
+                  <span>{isRtl ? 'الذكاء الاصطناعي لمراسيم' : 'Maraseem AI Assistant'}</span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+                  <span>{isRtl ? 'المساعد الذكي للأعراس الجماعية (الخطب والبيانات والتعاميم)' : 'AI Mass Wedding Assistant'}</span>
+                </h3>
+                <p className="text-xs sm:text-sm text-purple-100/90 leading-relaxed">
+                  {isRtl
+                    ? `صياغة احترافية باللغة الحضرمية والفصحى لكلمة افتتاح الحفل، وبيان الدعوة العامة، وتعاميم اللجان الميدانية.`
+                    : `Generate speeches, public announcements, and field directives using AI.`}
+                </p>
+              </div>
+
+              {/* Action Prompt Selector in Banner */}
+              <div className="flex items-center gap-1.5 bg-black/30 p-1.5 rounded-2xl border border-white/10 text-xs font-bold shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setAiPromptType('invitation')}
+                  className={`px-3 py-1.5 rounded-xl transition ${aiPromptType === 'invitation' ? 'bg-amber-500 text-amber-950 shadow-sm font-black' : 'text-gray-300 hover:text-white'}`}
+                >
+                  {isRtl ? 'بيان الدعوة العامة' : 'Public Invite'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAiPromptType('speech')}
+                  className={`px-3 py-1.5 rounded-xl transition ${aiPromptType === 'speech' ? 'bg-amber-500 text-amber-950 shadow-sm font-black' : 'text-gray-300 hover:text-white'}`}
+                >
+                  {isRtl ? 'كلمة حفل اللجنة' : 'Keynote Speech'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAiPromptType('directives')}
+                  className={`px-3 py-1.5 rounded-xl transition ${aiPromptType === 'directives' ? 'bg-amber-500 text-amber-950 shadow-sm font-black' : 'text-gray-300 hover:text-white'}`}
+                >
+                  {isRtl ? 'تعميم اللجان' : 'Directives'}
+                </button>
+              </div>
             </div>
           </div>
+
+          <div className="bg-white p-6 rounded-3xl border border-gray-200/80 shadow-sm space-y-6">
 
           <div className="flex gap-3">
             <button
@@ -1758,6 +1956,7 @@ export default function MassWeddingDashboard({
             </div>
           )}
 
+        </div>
         </div>
       )}
 
