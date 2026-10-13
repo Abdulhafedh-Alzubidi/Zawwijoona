@@ -362,7 +362,7 @@ export default function App() {
       sessionStorage.clear();
 
     } catch (error) {
-      console.error("Error signing out:", error);
+      // Error signing out intentionally suppressed
     }
   };
 
@@ -518,7 +518,6 @@ export default function App() {
       await setDoc(userDocRef, { [field]: value }, { merge: true });
       setFirestorePermissionError(false);
     } catch (error) {
-      console.error(`خطأ في حفظ ${field} في فايربيس:`, error);
       if (error?.code === 'permission-denied') {
         setFirestorePermissionError(true);
       }
@@ -566,7 +565,6 @@ export default function App() {
             }
           }
         } catch (error) {
-          console.error("خطأ في استرجاع البيانات من فايربيس:", error);
           if (error?.code === 'permission-denied') {
             setFirestorePermissionError(true);
           }
@@ -635,7 +633,7 @@ export default function App() {
         const userDocRef = doc(db, 'users', user.uid);
         await setDoc(userDocRef, patch, { merge: true });
       } catch (err) {
-        console.error("Error clearing individual wedding:", err);
+        // Error clearing individual wedding intentionally suppressed
       }
     }
   };
@@ -661,7 +659,7 @@ export default function App() {
         const userDocRef = doc(db, 'users', user.uid);
         await setDoc(userDocRef, patch, { merge: true });
       } catch (err) {
-        console.error("Error clearing mass wedding:", err);
+        // Error clearing mass wedding intentionally suppressed
       }
     }
   };
@@ -847,7 +845,6 @@ export default function App() {
         setFirestorePermissionError(false);
         console.log("تم حفظ بيانات الزفاف بنجاح في السيرفر!");
       } catch (error) {
-        console.error("خطأ في حفظ البيانات في فايربيس:", error);
         if (error?.code === 'permission-denied') {
           setFirestorePermissionError(true);
         }
