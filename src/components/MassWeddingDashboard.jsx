@@ -1,5 +1,7 @@
+import * as XLSX from 'xlsx';
 import React, { useState, useMemo } from 'react';
 import {
+  Printer, ArrowRight, FileSpreadsheet, UserPlus, UploadCloud, Download,
   Users2, HeartHandshake, Utensils, Calendar, Clock, MapPin,
   Sparkles, CheckCircle2, AlertCircle, Plus, Trash2, Search,
   Phone, Share2, Copy, Check, Filter, ArrowUpRight, ShieldCheck,
@@ -47,6 +49,19 @@ export default function MassWeddingDashboard({
   const [editingSupplyItem, setEditingSupplyItem] = useState(null);
   const [supplyCategoryFilter, setSupplyCategoryFilter] = useState('all');
   const [supplySearchQuery, setSupplySearchQuery] = useState('');
+
+  // --- Committee Detailed Page & Members States ---
+  const [selectedCommitteeId, setSelectedCommitteeId] = useState(null);
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [editingMember, setEditingMember] = useState(null);
+  const [showImportExcelModal, setShowImportExcelModal] = useState(false);
+  const [showPdfReportModal, setShowPdfReportModal] = useState(false);
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
+  const [excelPreviewMembers, setExcelPreviewMembers] = useState([]);
+  const [excelFileName, setExcelFileName] = useState('');
+  const [excelError, setExcelError] = useState('');
+  const [newInlineTaskText, setNewInlineTaskText] = useState('');
+  const [formDynamicTasks, setFormDynamicTasks] = useState(['']);
 
   // --- Search & Filters ---
   const [coupleSearch, setCoupleSearch] = useState('');
@@ -196,7 +211,204 @@ export default function MassWeddingDashboard({
 
   const handleEditCommittee = (committee) => {
     setEditingCommittee(committee);
+    const existingTasks = (committee.tasks && committee.tasks.length > 0)
+      ? committee.tasks.map(t => typeof t === 'string' ? t : t.text)
+      : (committee.responsibilities || ['']);
+    setFormDynamicTasks(existingTasks.length > 0 ? existingTasks : ['']);
     setShowAddCommitteeModal(true);
+  };
+
+  // --- Handlers: Committee Members & Tasks ---
+  const handleSaveMember = (committeeId, memberData) => {
+    const updatedCommittees = committees.map((com) => {
+      if (com.id === committeeId) {
+        const currentMembers = com.members || [];
+        let updatedMembers;
+        if (memberData.id && currentMembers.some((m) => m.id === memberData.id)) {
+          updatedMembers = currentMembers.map((m) => (m.id === memberData.id ? { ...m, ...memberData } : m));
+        } else {
+          updatedMembers = [...currentMembers, { ...memberData, id: memberData.id || `mem-${Date.now()}-${Math.random().toString(36).substr(2, 4)}` }];
+        }
+        return {
+          ...com,
+          members: updatedMembers,
+          volunteersCount: Math.max(com.volunteersCount || 0, updatedMembers.length)
+        };
+      }
+      return com;
+    });
+    onUpdateData({ ...data, committees: updatedCommittees });
+    setShowAddMemberModal(false);
+    setEditingMember(null);
+  };
+
+  const handleDeleteMember = (committeeId, memberId) => {
+    if (window.confirm(isRtl ? 'هل أنت متأكد من حذف هذا العضو من اللجنة؟' : 'Remove this member?')) {
+      const updatedCommittees = committees.map((com) => {
+        if (com.id === committeeId) {
+          const updatedMembers = (com.members || []).filter((m) => m.id !== memberId);
+          return { ...com, members: updatedMembers };
+        }
+        return com;
+      });
+      onUpdateData({ ...data, committees: updatedCommittees });
+    }
+  };
+
+  const handleToggleCommitteeTask = (committeeId, taskId) => {
+    const updatedCommittees = committees.map((com) => {
+      if (com.id === committeeId) {
+        // Normalize tasks
+        const currentTasks = (com.tasks && com.tasks.length > 0)
+          ? com.tasks
+          : (com.responsibilities || []).map((r, i) => ({ id: `task-${i}`, text: r, completed: false }));
+        
+        const updatedTasks = currentTasks.map((t, idx) => {
+          const tid = t.id || `task-${idx}`;
+          if (tid === taskId || idx === taskId) {
+            return { ...t, completed: !t.completed };
+          }
+          return t;
+        });
+        return { ...com, tasks: updatedTasks };
+      }
+      return com;
+    });
+    onUpdateData({ ...data, committees: updatedCommittees });
+  };
+
+  const handleAddCommitteeTask = (committeeId, taskText) => {
+    if (!taskText || !taskText.trim()) return;
+    const updatedCommittees = committees.map((com) => {
+      if (com.id === committeeId) {
+        const currentTasks = (com.tasks && com.tasks.length > 0)
+          ? com.tasks
+          : (com.responsibilities || []).map((r, i) => ({ id: `task-${i}`, text: r, completed: false }));
+        const newTask = {
+          id: `task-${Date.now()}`,
+          text: taskText.trim(),
+          completed: false
+        };
+        return {
+          ...com,
+          tasks: [...currentTasks, newTask],
+          responsibilities: [...(com.responsibilities || []), taskText.trim()]
+        };
+      }
+      return com;
+    });
+    onUpdateData({ ...data, committees: updatedCommittees });
+    setNewInlineTaskText('');
+  };
+
+  const handleDeleteCommitteeTask = (committeeId, taskId) => {
+    const updatedCommittees = committees.map((com) => {
+      if (com.id === committeeId) {
+        const currentTasks = (com.tasks && com.tasks.length > 0)
+          ? com.tasks
+          : (com.responsibilities || []).map((r, i) => ({ id: `task-${i}`, text: r, completed: false }));
+        const updatedTasks = currentTasks.filter((t, idx) => (t.id || `task-${idx}`) !== taskId && idx !== taskId);
+        return { ...com, tasks: updatedTasks, responsibilities: updatedTasks.map(t => t.text) };
+      }
+      return com;
+    });
+    onUpdateData({ ...data, committees: updatedCommittees });
+  };
+
+  // Excel / CSV File Parsing Handler
+  const handleExcelFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setExcelFileName(file.name);
+    setExcelError('');
+    setExcelPreviewMembers([]);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const dataRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+        if (!dataRows || dataRows.length < 2) {
+          setExcelError(isRtl ? 'الملف فارغ أو لا يحتوي على صفوف كافية.' : 'File is empty or missing rows.');
+          return;
+        }
+
+        // Detect headers in row 0
+        const headers = dataRows[0].map(h => String(h || '').trim().toLowerCase());
+        let nameIdx = headers.findIndex(h => h.includes('اسم') || h.includes('name'));
+        let phoneIdx = headers.findIndex(h => h.includes('هاتف') || h.includes('جوال') || h.includes('phone') || h.includes('mobile'));
+        let roleIdx = headers.findIndex(h => h.includes('دور') || h.includes('صفة') || h.includes('مهمة') || h.includes('role'));
+
+        // Fallback default indexes if not matched
+        if (nameIdx === -1) nameIdx = 0;
+        if (phoneIdx === -1) phoneIdx = 1 < headers.length ? 1 : -1;
+        if (roleIdx === -1) roleIdx = 2 < headers.length ? 2 : -1;
+
+        const parsed = [];
+        for (let i = 1; i < dataRows.length; i++) {
+          const row = dataRows[i];
+          if (!row || row.length === 0) continue;
+          const name = String(row[nameIdx] || '').trim();
+          if (!name) continue;
+          const phone = phoneIdx !== -1 ? String(row[phoneIdx] || '').trim() : '';
+          const role = roleIdx !== -1 ? String(row[roleIdx] || '').trim() : (isRtl ? 'عضو ميداني' : 'Field Member');
+
+          parsed.push({
+            id: `mem-import-${Date.now()}-${i}`,
+            name,
+            phone,
+            role: role || (isRtl ? 'عضو ميداني' : 'Field Member')
+          });
+        }
+
+        if (parsed.length === 0) {
+          setExcelError(isRtl ? 'لم يتم العثور على أي أسماء صالحة في الملف.' : 'No valid names found in file.');
+        } else {
+          setExcelPreviewMembers(parsed);
+        }
+      } catch (err) {
+        console.error('Error parsing excel file:', err);
+        setExcelError(isRtl ? 'تعذر قراءة الملف. يرجى التأكد من صيغة الملف (.xlsx أو .csv).' : 'Failed to parse file.');
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleConfirmImportExcel = (committeeId) => {
+    if (!excelPreviewMembers || excelPreviewMembers.length === 0) return;
+    const updatedCommittees = committees.map((com) => {
+      if (com.id === committeeId) {
+        const currentMembers = com.members || [];
+        const merged = [...currentMembers, ...excelPreviewMembers];
+        return {
+          ...com,
+          members: merged,
+          volunteersCount: Math.max(com.volunteersCount || 0, merged.length)
+        };
+      }
+      return com;
+    });
+    onUpdateData({ ...data, committees: updatedCommittees });
+    setShowImportExcelModal(false);
+    setExcelPreviewMembers([]);
+    setExcelFileName('');
+    alert(isRtl ? `تم استيراد ${excelPreviewMembers.length} عضو بنجاح! ✓` : `Imported ${excelPreviewMembers.length} members! ✓`);
+  };
+
+  const handleDownloadSampleCsv = () => {
+    const csvContent = "\uFEFFالاسم,رقم الهاتف,الدور أو المهمة\nمحمد سالم باحميد,777123456,مسؤول ضيافة الساموار\nعمر خالد الكثيري,771987654,تنظيم ساحة العرس\nسعيد أحمد باوزير,770555444,عضو لجنة الاستقبال\n";
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'نموذج_أعضاء_اللجنة_مراسيم.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleDeleteCommittee = (comId) => {
@@ -1073,157 +1285,624 @@ export default function MassWeddingDashboard({
       )}
 
       {/* === SUB-TAB 3: COMMITTEES & TEAMS === */}
-      {activeSubTab === 'committees' && (
-        <div className="space-y-4">
+      {activeSubTab === 'committees' && (() => {
+        const activeCommittee = committees.find((c) => c.id === selectedCommitteeId);
 
-          {/* Committees Specialized Hero Banner */}
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 text-white p-6 sm:p-7 shadow-lg">
-            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+        // --- VIEW 1: DEDICATED COMMITTEE DETAIL PAGE ---
+        if (selectedCommitteeId && activeCommittee) {
+          const comTasks = (activeCommittee.tasks && activeCommittee.tasks.length > 0)
+            ? activeCommittee.tasks
+            : (activeCommittee.responsibilities || []).map((r, i) => ({ id: `task-${i}`, text: r, completed: false }));
+          const completedTasksCount = comTasks.filter((t) => t.completed).length;
+          const taskCompletionPct = comTasks.length > 0 ? Math.round((completedTasksCount / comTasks.length) * 100) : 0;
+          const comMembers = activeCommittee.members || [];
+          const filteredMembers = comMembers.filter((m) => {
+            if (!memberSearchQuery.trim()) return true;
+            const q = memberSearchQuery.toLowerCase();
+            return (
+              (m.name && m.name.toLowerCase().includes(q)) ||
+              (m.phone && m.phone.toLowerCase().includes(q)) ||
+              (m.role && m.role.toLowerCase().includes(q))
+            );
+          });
 
-            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div className="space-y-1.5 max-w-2xl">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20 text-blue-100">
-                  <HeartHandshake size={14} />
-                  <span>{isRtl ? 'اللجان التنظيمية والفرق الميدانية' : 'Field Committees & Teams'}</span>
-                </div>
-                <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-                  <span>{isRtl ? 'إدارة اللجان والفرق الميدانية والمتطوعين' : 'Committees, Leads & Volunteers'}</span>
-                </h3>
-                <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed">
-                  {isRtl
-                    ? `توزيع المهام والمسؤولين والفرق الميدانية (${committees.length} لجان، و ${totalVolunteers} متطوع ميداني) لتنظيم استقبال الضيوف، إعداد الوليمة والشاهي، وتأمين ساحات الحفل.`
-                    : `Organize field teams (${committees.length} committees, ${totalVolunteers} volunteers) to supervise guest reception, feast logistics, and venue order.`}
-                </p>
-              </div>
+          return (
+            <div className="space-y-6">
 
-              {/* Action Button */}
-              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              {/* Breadcrumb Navigation & Back Button */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs">
                 <button
                   type="button"
-                  onClick={() => { setEditingCommittee(null); setShowAddCommitteeModal(true); }}
-                  className="flex items-center gap-2 px-5 py-3 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-2xl font-black text-xs sm:text-sm shadow-md transition"
+                  onClick={() => setSelectedCommitteeId(null)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 font-black text-xs transition border border-amber-200/60 w-fit"
                 >
-                  <Plus size={18} />
-                  <span>{isRtl ? '➕ إضافة لجنة تنظيمية' : 'Add Committee'}</span>
+                  <ArrowRight size={16} className="rtl:rotate-0 ltr:rotate-180" />
+                  <span>{isRtl ? '← العودة لكافة اللجان التنظيمية' : 'Back to All Committees'}</span>
                 </button>
-              </div>
-            </div>
 
-            {/* Quick Stats Strip */}
-            <div className="mt-5 pt-4 border-t border-white/20 flex flex-wrap items-center gap-2.5 text-xs font-bold text-blue-100">
-              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-                👥 <span>{isRtl ? 'إجمالي اللجان:' : 'Total Committees:'}</span>
-                <strong className="text-white font-black">{committees.length}</strong>
-              </span>
-              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-                🤝 <span>{isRtl ? 'المتطوعين الميدانيين:' : 'Volunteers:'}</span>
-                <strong className="text-amber-300 font-black">{totalVolunteers}</strong>
-              </span>
-              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-                📋 <span>{isRtl ? 'مشرفي اللجان المعينين:' : 'Assigned Leads:'}</span>
-                <strong className="text-white font-black">{committees.filter(c => c.leader).length}</strong>
-              </span>
-            </div>
-          </div>
+                <div className="text-xs font-bold text-gray-500 flex items-center gap-2">
+                  <span>{isRtl ? 'اللجان الميدانية' : 'Committees'}</span>
+                  <span>/</span>
+                  <span className="text-amber-800 font-black">{activeCommittee.name}</span>
+                </div>
+              </div>
 
-          {committees.length === 0 ? (
-            <div className="bg-white p-12 rounded-3xl border border-dashed border-gray-300 text-center text-gray-500 space-y-4">
-              <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
-                <HeartHandshake size={32} />
-              </div>
-              <div className="space-y-1">
-                <h4 className="font-bold text-gray-800 text-base">
-                  {isRtl ? 'لا توجد لجان ميدانية مسجلة حتى الآن' : 'No committees registered yet'}
-                </h4>
-                <p className="text-xs text-gray-400 max-w-sm mx-auto">
-                  {isRtl ? 'أنشئ فرق العمل (كاللجنة الإعلامية، لجنة الضيافة والوليمة، ولجنة الاستقبال) لتوزيع المتطوعين والمهام.' : 'Create working teams to assign responsibilities, leads, and volunteers.'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => { setEditingCommittee(null); setShowAddCommitteeModal(true); }}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs sm:text-sm shadow-md transition"
-              >
-                <Plus size={16} />
-                <span>{isRtl ? 'إضافة أول لجنة تنظيمية' : 'Add First Committee'}</span>
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {committees.map((com) => (
-              <div
-                key={com.id}
-                className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-sm hover:shadow-md transition space-y-4 relative group"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h4 className="font-black text-base text-gray-900">{com.name}</h4>
-                    <p className="text-xs text-gray-500">{com.nameEn}</p>
+              {/* Committee Dedicated Hero Banner */}
+              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 text-white p-6 sm:p-7 shadow-lg">
+                <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+
+                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                  <div className="space-y-2 max-w-2xl">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20 text-blue-100">
+                      <HeartHandshake size={14} />
+                      <span>{isRtl ? 'الصفحة التفصيلية للجنة الميدانية' : 'Committee Detail Workspace'}</span>
+                    </div>
+
+                    <h2 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
+                      <span>{activeCommittee.name}</span>
+                    </h2>
+                    {activeCommittee.nameEn && (
+                      <p className="text-xs text-blue-200 font-medium">{activeCommittee.nameEn}</p>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-3 pt-2 text-xs">
+                      <div className="bg-white/15 px-3.5 py-1.5 rounded-xl border border-white/10 flex items-center gap-2">
+                        <span className="text-blue-200">{isRtl ? 'المشرف المسؤول:' : 'Lead:'}</span>
+                        <strong className="text-white font-black">{activeCommittee.leader}</strong>
+                      </div>
+
+                      {activeCommittee.phone && (
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`tel:${activeCommittee.phone}`}
+                            className="bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-100 px-3 py-1.5 rounded-xl border border-emerald-400/30 font-bold flex items-center gap-1.5 transition"
+                          >
+                            <Phone size={13} />
+                            <span dir="ltr">{activeCommittee.phone}</span>
+                          </a>
+                          <a
+                            href={`https://wa.me/${activeCommittee.phone.replace(/[^0-9]/g, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition shadow-sm"
+                          >
+                            <Share2 size={13} />
+                            <span>واتساب</span>
+                          </a>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1 opacity-90 sm:opacity-0 group-hover:opacity-100 transition">
+                  {/* Actions Strip in Hero */}
+                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                     <button
                       type="button"
-                      onClick={() => handleEditCommittee(com)}
-                      className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition"
+                      onClick={() => setShowPdfReportModal(true)}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-white/15 hover:bg-white/25 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/20 transition shadow-sm"
+                    >
+                      <Printer size={15} />
+                      <span>{isRtl ? '📄 طباعة وتصدير PDF' : 'Export PDF'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExcelError('');
+                        setExcelPreviewMembers([]);
+                        setExcelFileName('');
+                        setShowImportExcelModal(true);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/80 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs transition border border-emerald-400/40 shadow-sm"
+                    >
+                      <FileSpreadsheet size={15} />
+                      <span>{isRtl ? '📊 رفع ملف إكسل (جملة)' : 'Import Excel'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingMember(null);
+                        setShowAddMemberModal(true);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-xl font-black text-xs transition shadow-sm"
+                    >
+                      <UserPlus size={15} />
+                      <span>{isRtl ? '➕ إضافة عضو' : 'Add Member'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleEditCommittee(activeCommittee)}
+                      className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition"
                       title={isRtl ? 'تعديل بيانات اللجنة' : 'Edit Committee'}
                     >
                       <Edit2 size={16} />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteCommittee(com.id)}
-                      className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
-                      title={isRtl ? 'حذف اللجنة' : 'Delete'}
-                    >
-                      <Trash2 size={16} />
-                    </button>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 text-xs">
-                  <div className="flex items-center gap-1.5 bg-amber-50 text-amber-900 px-3 py-1.5 rounded-xl font-bold">
-                    <span>{isRtl ? 'المشرف:' : 'Head:'}</span>
-                    <span>{com.leader}</span>
+                {/* KPI Strip */}
+                <div className="mt-6 pt-4 border-t border-white/20 flex flex-wrap items-center gap-2.5 text-xs font-bold text-blue-100">
+                  <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                    👥 <span>{isRtl ? 'الأعضاء المسجلين بالاسم:' : 'Registered Members:'}</span>
+                    <strong className="text-amber-300 font-black">{comMembers.length}</strong>
+                  </span>
+                  <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                    📋 <span>{isRtl ? 'إجمالي المهام الموكلة:' : 'Total Tasks:'}</span>
+                    <strong className="text-white font-black">{comTasks.length}</strong>
+                  </span>
+                  <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                    ✅ <span>{isRtl ? 'المهام المنجزة:' : 'Completed:'}</span>
+                    <strong className="text-emerald-300 font-black">{completedTasksCount} / {comTasks.length} ({taskCompletionPct}%)</strong>
+                  </span>
+                  <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                    🤝 <span>{isRtl ? 'المتطوعين المقدرين:' : 'Target Volunteers:'}</span>
+                    <strong className="text-white font-black">{activeCommittee.volunteersCount || comMembers.length}</strong>
+                  </span>
+                </div>
+              </div>
+
+              {/* Two Column Grid: Left Members, Right Tasks */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+                {/* Section A: Members Roster (7 Cols) */}
+                <div className="lg:col-span-7 bg-white p-5 sm:p-6 rounded-3xl border border-gray-200/80 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+                    <div>
+                      <h3 className="font-black text-base text-gray-900 flex items-center gap-2">
+                        <Users2 size={18} className="text-blue-600" />
+                        <span>{isRtl ? 'سجل أعضاء اللجنة وفريق العمل' : 'Committee Members Roster'}</span>
+                        <span className="text-xs bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full font-bold">
+                          {comMembers.length}
+                        </span>
+                      </h3>
+                      <p className="text-xs text-gray-500">
+                        {isRtl ? 'إدارة أسماء الأعضاء، أرقام هواتفهم، والمهام الميدانية الموكلة لكل عضو' : 'Manage members, phone numbers, and designated field roles'}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setExcelError('');
+                          setExcelPreviewMembers([]);
+                          setExcelFileName('');
+                          setShowImportExcelModal(true);
+                        }}
+                        className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl font-bold text-xs flex items-center gap-1.5 border border-emerald-200 transition"
+                      >
+                        <FileSpreadsheet size={14} />
+                        <span>{isRtl ? 'استيراد إكسل' : 'Import'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingMember(null);
+                          setShowAddMemberModal(true);
+                        }}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition"
+                      >
+                        <Plus size={14} />
+                        <span>{isRtl ? 'إضافة عضو' : 'Add'}</span>
+                      </button>
+                    </div>
                   </div>
 
-                  {com.phone && (
-                    <a
-                      href={`tel:${com.phone}`}
-                      className="flex items-center gap-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-3 py-1.5 rounded-xl font-bold transition"
-                    >
-                      <Phone size={13} />
-                      <span dir="ltr">{com.phone}</span>
-                    </a>
+                  {/* Search input for members */}
+                  {comMembers.length > 3 && (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder={isRtl ? 'بحث باسم العضو، الهاتف، أو الدور...' : 'Search member, phone, role...'}
+                        value={memberSearchQuery}
+                        onChange={(e) => setMemberSearchQuery(e.target.value)}
+                        className="w-full px-4 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl font-semibold pl-9 rtl:pr-9 rtl:pl-4"
+                      />
+                      <Search size={14} className="absolute top-3 ltr:left-3 rtl:right-3 text-gray-400" />
+                    </div>
                   )}
 
-                  <div className="flex items-center gap-1 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl font-bold">
-                    <span>{com.volunteersCount} {isRtl ? 'متطوع' : 'volunteers'}</span>
+                  {/* Members List */}
+                  {filteredMembers.length === 0 ? (
+                    <div className="p-8 sm:p-10 rounded-2xl bg-gray-50 border border-dashed border-gray-200 text-center space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                        <Users2 size={24} />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-gray-800 text-sm">
+                          {isRtl ? 'لا يوجد أعضاء مسجلون في هذه اللجنة بعد' : 'No members registered yet'}
+                        </h4>
+                        <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                          {isRtl
+                            ? 'أضف الأعضاء يدوياً مع أرقام هواتفهم، أو ارفع ملف إكسل لإضافتهم بالجملة دفعة واحدة.'
+                            : 'Add members manually with phone numbers or upload an Excel file for bulk addition.'}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingMember(null);
+                            setShowAddMemberModal(true);
+                          }}
+                          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs transition shadow-sm"
+                        >
+                          {isRtl ? '➕ إضافة عضو يدوياً' : 'Add Member'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExcelError('');
+                            setExcelPreviewMembers([]);
+                            setExcelFileName('');
+                            setShowImportExcelModal(true);
+                          }}
+                          className="px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl font-bold text-xs border border-emerald-200 transition"
+                        >
+                          {isRtl ? '📊 رفع ملف إكسل' : 'Upload Excel'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100 border border-gray-200/80 rounded-2xl overflow-hidden max-h-[500px] overflow-y-auto">
+                      {filteredMembers.map((member, idx) => (
+                        <div
+                          key={member.id || idx}
+                          className="p-3.5 sm:p-4 bg-white hover:bg-blue-50/40 transition flex items-center justify-between gap-3 text-xs"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center font-black shrink-0 text-xs">
+                              {idx + 1}
+                            </div>
+                            <div className="min-w-0">
+                              <h5 className="font-black text-gray-900 text-sm truncate">{member.name}</h5>
+                              <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[11px] text-gray-500">
+                                <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-bold">
+                                  {member.role || (isRtl ? 'عضو ميداني' : 'Field Member')}
+                                </span>
+                                {member.phone && (
+                                  <span className="font-mono text-gray-600" dir="ltr">{member.phone}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {member.phone && (
+                              <>
+                                <a
+                                  href={`tel:${member.phone}`}
+                                  className="p-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg transition"
+                                  title={isRtl ? 'اتصال هاتف' : 'Call'}
+                                >
+                                  <Phone size={14} />
+                                </a>
+                                <a
+                                  href={`https://wa.me/${member.phone.replace(/[^0-9]/g, '')}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-1.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg transition"
+                                  title={isRtl ? 'مراسلة واتساب' : 'WhatsApp'}
+                                >
+                                  <Share2 size={14} />
+                                </a>
+                              </>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingMember(member);
+                                setShowAddMemberModal(true);
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
+                              title={isRtl ? 'تعديل' : 'Edit'}
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteMember(activeCommittee.id, member.id)}
+                              className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                              title={isRtl ? 'حذف' : 'Delete'}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Section B: Tasks & Responsibilities Checklist (5 Cols) */}
+                <div className="lg:col-span-5 bg-white p-5 sm:p-6 rounded-3xl border border-gray-200/80 shadow-sm space-y-4">
+                  <div className="pb-3 border-b border-gray-100">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-black text-base text-gray-900 flex items-center gap-2">
+                        <CheckCircle2 size={18} className="text-amber-600" />
+                        <span>{isRtl ? 'قائمة المهام والمسؤوليات' : 'Tasks & Checklist'}</span>
+                      </h3>
+                      <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200">
+                        {completedTasksCount} / {comTasks.length}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {isRtl ? 'اضغط على مربع المهمة لتبديل حالتها بين مكتملة وقيد التنفيذ' : 'Click checkbox to mark task completion'}
+                    </p>
+
+                    {/* Progress Bar */}
+                    <div className="mt-3 bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-emerald-500 h-full transition-all duration-300"
+                        style={{ width: `${taskCompletionPct}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* Inline Add Task Form */}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleAddCommitteeTask(activeCommittee.id, newInlineTaskText);
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <input
+                      type="text"
+                      placeholder={isRtl ? 'أضف مهمة جديدة واضغط Enter...' : 'Add task and press Enter...'}
+                      value={newInlineTaskText}
+                      onChange={(e) => setNewInlineTaskText(e.target.value)}
+                      className="flex-1 px-3.5 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl font-bold focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!newInlineTaskText.trim()}
+                      className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white rounded-xl font-bold text-xs transition shrink-0"
+                    >
+                      {isRtl ? 'إضافة' : 'Add'}
+                    </button>
+                  </form>
+
+                  {/* Tasks Checklist Items */}
+                  <div className="space-y-2 max-h-[420px] overflow-y-auto">
+                    {comTasks.length === 0 ? (
+                      <div className="p-6 rounded-2xl bg-gray-50 border border-dashed border-gray-200 text-center text-gray-400 text-xs">
+                        {isRtl ? 'لم تسجل أي مهام لهذه اللجنة بعد. اكتب مهمة في الحقل أعلاه وأضفها.' : 'No tasks assigned yet. Add one above.'}
+                      </div>
+                    ) : (
+                      comTasks.map((task, idx) => {
+                        const taskId = task.id || `task-${idx}`;
+                        const isDone = Boolean(task.completed);
+                        return (
+                          <div
+                            key={taskId}
+                            className={`p-3 rounded-2xl border transition flex items-start justify-between gap-3 text-xs ${
+                              isDone ? 'bg-emerald-50/40 border-emerald-200' : 'bg-gray-50/80 border-gray-200 hover:bg-white'
+                            }`}
+                          >
+                            <label className="flex items-start gap-2.5 cursor-pointer flex-1 select-none">
+                              <input
+                                type="checkbox"
+                                checked={isDone}
+                                onChange={() => handleToggleCommitteeTask(activeCommittee.id, taskId)}
+                                className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                              />
+                              <span className={`font-bold leading-snug ${isDone ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                                {task.text || task}
+                              </span>
+                            </label>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCommitteeTask(activeCommittee.id, taskId)}
+                              className="text-gray-400 hover:text-rose-600 p-1 rounded-lg hover:bg-rose-50 transition shrink-0"
+                              title={isRtl ? 'حذف المهمة' : 'Delete Task'}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
 
-                {com.responsibilities && com.responsibilities.length > 0 && (
-                  <div className="space-y-1.5 pt-2 border-t border-gray-100">
-                    <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                      {isRtl ? 'المهام والمسؤوليات الرئيسية:' : 'Key Responsibilities:'}
-                    </span>
-                    <ul className="space-y-1 text-xs text-gray-600">
-                      {com.responsibilities.map((resp, i) => (
-                        <li key={i} className="flex items-start gap-2">
-                          <CheckCircle2 size={14} className="text-amber-600 shrink-0 mt-0.5" />
-                          <span>{resp}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
               </div>
-            ))}
-          </div>
-          )}
 
-        </div>
-      )}
+            </div>
+          );
+        }
+
+        // --- VIEW 2: ALL COMMITTEES GRID VIEW ---
+        return (
+          <div className="space-y-4">
+
+            {/* Committees Specialized Hero Banner */}
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 text-white p-6 sm:p-7 shadow-lg">
+              <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+
+              <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div className="space-y-1.5 max-w-2xl">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20 text-blue-100">
+                    <HeartHandshake size={14} />
+                    <span>{isRtl ? 'اللجان التنظيمية والفرق الميدانية' : 'Field Committees & Teams'}</span>
+                  </div>
+                  <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+                    <span>{isRtl ? 'إدارة اللجان والفرق الميدانية والمتطوعين' : 'Committees, Leads & Volunteers'}</span>
+                  </h3>
+                  <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed">
+                    {isRtl
+                      ? `توزيع المهام والمسؤولين والفرق الميدانية (${committees.length} لجان، و ${totalVolunteers} متطوع ميداني) لتنظيم استقبال الضيوف، إعداد الوليمة والشاهي، وتأمين ساحات الحفل. انقر على أي لجنة للدخول إلى صفحتها التفصيلية لإدارة الأعضاء وتصدير التقارير.`
+                      : `Organize field teams (${committees.length} committees, ${totalVolunteers} volunteers) to supervise guest reception, feast logistics, and venue order. Click any committee to manage details.`}
+                  </p>
+                </div>
+
+                {/* Action Button */}
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCommittee(null);
+                      setFormDynamicTasks(['', '']);
+                      setShowAddCommitteeModal(true);
+                    }}
+                    className="flex items-center gap-2 px-5 py-3 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-2xl font-black text-xs sm:text-sm shadow-md transition"
+                  >
+                    <Plus size={18} />
+                    <span>{isRtl ? '➕ إضافة لجنة تنظيمية' : 'Add Committee'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Stats Strip */}
+              <div className="mt-5 pt-4 border-t border-white/20 flex flex-wrap items-center gap-2.5 text-xs font-bold text-blue-100">
+                <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                  👥 <span>{isRtl ? 'إجمالي اللجان:' : 'Total Committees:'}</span>
+                  <strong className="text-white font-black">{committees.length}</strong>
+                </span>
+                <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                  🤝 <span>{isRtl ? 'المتطوعين الميدانيين:' : 'Volunteers:'}</span>
+                  <strong className="text-amber-300 font-black">{totalVolunteers}</strong>
+                </span>
+                <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                  📋 <span>{isRtl ? 'مشرفي اللجان المعينين:' : 'Assigned Leads:'}</span>
+                  <strong className="text-white font-black">{committees.filter((c) => c.leader).length}</strong>
+                </span>
+              </div>
+            </div>
+
+            {committees.length === 0 ? (
+              <div className="bg-white p-12 rounded-3xl border border-dashed border-gray-300 text-center text-gray-500 space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+                  <HeartHandshake size={32} />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="font-bold text-gray-800 text-base">
+                    {isRtl ? 'لا توجد لجان ميدانية مسجلة حتى الآن' : 'No committees registered yet'}
+                  </h4>
+                  <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                    {isRtl
+                      ? 'أنشئ فرق العمل (كاللجنة الإعلامية، لجنة الضيافة والوليمة، ولجنة الاستقبال) لتوزيع المتطوعين والمهام.'
+                      : 'Create working teams to assign responsibilities, leads, and volunteers.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingCommittee(null);
+                    setFormDynamicTasks(['', '']);
+                    setShowAddCommitteeModal(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs sm:text-sm shadow-md transition"
+                >
+                  <Plus size={16} />
+                  <span>{isRtl ? 'إضافة أول لجنة تنظيمية' : 'Add First Committee'}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {committees.map((com) => {
+                  const comMembersCount = (com.members || []).length;
+                  const comTasks = (com.tasks && com.tasks.length > 0)
+                    ? com.tasks
+                    : (com.responsibilities || []).map((r, i) => ({ id: `task-${i}`, text: r, completed: false }));
+                  const comCompletedTasks = comTasks.filter((t) => t.completed).length;
+
+                  return (
+                    <div
+                      key={com.id}
+                      onClick={() => setSelectedCommitteeId(com.id)}
+                      className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-sm hover:shadow-md hover:border-blue-400 transition space-y-4 relative group cursor-pointer"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h4 className="font-black text-base text-gray-900 group-hover:text-blue-700 transition">
+                            {com.name}
+                          </h4>
+                          <p className="text-xs text-gray-500">{com.nameEn}</p>
+                        </div>
+
+                        <div className="flex items-center gap-1 opacity-90 sm:opacity-0 group-hover:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => handleEditCommittee(com)}
+                            className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition"
+                            title={isRtl ? 'تعديل بيانات اللجنة' : 'Edit Committee'}
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCommittee(com.id)}
+                            className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
+                            title={isRtl ? 'حذف اللجنة' : 'Delete'}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Head & Contact */}
+                      <div className="flex flex-wrap items-center gap-2.5 text-xs">
+                        <div className="flex items-center gap-1.5 bg-amber-50 text-amber-900 px-3 py-1.5 rounded-xl font-bold">
+                          <span>{isRtl ? 'المشرف:' : 'Head:'}</span>
+                          <span>{com.leader}</span>
+                        </div>
+
+                        {com.phone && (
+                          <a
+                            href={`tel:${com.phone}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex items-center gap-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-3 py-1.5 rounded-xl font-bold transition"
+                          >
+                            <Phone size={13} />
+                            <span dir="ltr">{com.phone}</span>
+                          </a>
+                        )}
+
+                        <div className="flex items-center gap-1 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl font-bold">
+                          <span>{comMembersCount > 0 ? `${comMembersCount} ${isRtl ? 'أعضاء مسجلين' : 'members'}` : `${com.volunteersCount || 0} ${isRtl ? 'متطوع' : 'volunteers'}`}</span>
+                        </div>
+                      </div>
+
+                      {/* Tasks Summary */}
+                      {comTasks.length > 0 && (
+                        <div className="space-y-1.5 pt-2 border-t border-gray-100 text-xs">
+                          <div className="flex items-center justify-between text-[11px] text-gray-500 font-bold">
+                            <span>{isRtl ? 'المهام الرئيسية:' : 'Key Tasks:'} ({comCompletedTasks}/{comTasks.length})</span>
+                            <span className="text-blue-600 group-hover:underline">
+                              {isRtl ? 'فتح صفحة اللجنة التفصيلية ←' : 'Open Workspace →'}
+                            </span>
+                          </div>
+                          <ul className="space-y-1 text-xs text-gray-600">
+                            {comTasks.slice(0, 2).map((t, i) => (
+                              <li key={i} className="flex items-start gap-2 truncate">
+                                <CheckCircle2 size={13} className={`shrink-0 mt-0.5 ${t.completed ? 'text-emerald-600' : 'text-gray-400'}`} />
+                                <span className={`truncate ${t.completed ? 'line-through text-gray-400' : ''}`}>
+                                  {t.text || t}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Click invitation button */}
+                      <div className="pt-2 border-t border-gray-50 flex items-center justify-between text-xs font-black text-blue-700 group-hover:text-blue-900">
+                        <span>{isRtl ? 'إدارة الأعضاء وتصدير التقارير 📋' : 'Manage Members & Reports 📋'}</span>
+                        <ArrowRight size={14} className="rtl:rotate-180 transition transform group-hover:translate-x-1 rtl:group-hover:-translate-x-1" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+          </div>
+        );
+      })()}
 
       {/* === SUB-TAB 4: BUDGET & SPONSORS === */}
       {activeSubTab === 'budget' && (
@@ -2059,12 +2738,12 @@ export default function MassWeddingDashboard({
       {/* Modal 2: Add / Edit Committee */}
       {showAddCommitteeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-100 space-y-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-amber-100 space-y-4 my-8">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-black text-gray-900">
                 {editingCommittee
                   ? (isRtl ? 'تعديل بيانات اللجنة' : 'Edit Committee')
-                  : (isRtl ? 'إضافة لجنة تنظيمية' : 'Add Committee')}
+                  : (isRtl ? 'إضافة لجنة تنظيمية جديدة' : 'Add Committee')}
               </h3>
               <button
                 type="button"
@@ -2079,55 +2758,534 @@ export default function MassWeddingDashboard({
               onSubmit={(e) => {
                 e.preventDefault();
                 const fd = new FormData(e.target);
+                const cleanedTasks = formDynamicTasks.map((t) => t.trim()).filter(Boolean);
                 handleSaveCommittee({
                   id: editingCommittee?.id,
                   name: fd.get('name'),
-                  nameEn: fd.get('name'),
+                  nameEn: fd.get('nameEn') || fd.get('name'),
                   leader: fd.get('leader'),
                   phone: fd.get('phone') || '',
-                  volunteersCount: Number(fd.get('volunteersCount')) || 10,
-                  responsibilities: [fd.get('task1'), fd.get('task2')].filter(Boolean),
+                  volunteersCount: Number(fd.get('volunteersCount')) || Math.max(10, editingCommittee?.members?.length || 0),
+                  responsibilities: cleanedTasks,
+                  tasks: cleanedTasks.map((t, idx) => {
+                    const existing = editingCommittee?.tasks?.[idx];
+                    return {
+                      id: existing?.id || `task-${Date.now()}-${idx}`,
+                      text: t,
+                      completed: Boolean(existing?.completed)
+                    };
+                  }),
+                  members: editingCommittee?.members || [],
                   status: editingCommittee?.status || 'ready'
                 });
               }}
-              className="space-y-3 text-xs"
+              className="space-y-3.5 text-xs"
             >
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'اسم اللجنة' : 'Committee Name'}</label>
-                <input type="text" name="name" defaultValue={editingCommittee?.name || ''} required placeholder={isRtl ? 'لجنة...' : 'Committee...'} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'مشرف اللجنة' : 'Leader'}</label>
-                  <input type="text" name="leader" defaultValue={editingCommittee?.leader || ''} required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'اسم اللجنة (بالعربية)' : 'Committee Name'}</label>
+                  <input type="text" name="name" defaultValue={editingCommittee?.name || ''} required placeholder={isRtl ? 'لجنة الضيافة والوليمة...' : 'Committee...'} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
                 </div>
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'عدد المتطوعين' : 'Volunteers'}</label>
+                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'الاسم بالإنجليزية (اختياري)' : 'English Name'}</label>
+                  <input type="text" name="nameEn" defaultValue={editingCommittee?.nameEn || ''} placeholder="Catering Committee" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'مشرف اللجنة المسؤول' : 'Head / Leader'}</label>
+                  <input type="text" name="leader" defaultValue={editingCommittee?.leader || ''} required placeholder={isRtl ? 'الاسم الرباعي' : 'Leader Name'} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'المتطوعين التقديري' : 'Target Volunteers'}</label>
                   <input type="number" name="volunteersCount" defaultValue={editingCommittee?.volunteersCount || 15} min="1" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
                 </div>
               </div>
+
               <div>
-                <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'رقم الهاتف' : 'Phone'}</label>
-                <input type="text" name="phone" defaultValue={editingCommittee?.phone || ''} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5" dir="ltr" />
+                <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'رقم هاتف المشرف (للاتصال وواتساب)' : 'Leader Phone'}</label>
+                <input type="text" name="phone" defaultValue={editingCommittee?.phone || ''} placeholder="777123456" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5" dir="ltr" />
               </div>
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'المهمة الرئيسية الأولى' : 'Task 1'}</label>
-                <input type="text" name="task1" defaultValue={editingCommittee?.responsibilities?.[0] || ''} placeholder={isRtl ? 'متابعة...' : 'Task...'} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5" />
+
+              {/* Dynamic Multiple Tasks Input */}
+              <div className="pt-2 border-t border-gray-100 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block font-black text-gray-900">{isRtl ? 'مهام ومسؤوليات اللجنة:' : 'Committee Responsibilities & Tasks:'}</label>
+                  <button
+                    type="button"
+                    onClick={() => setFormDynamicTasks([...formDynamicTasks, ''])}
+                    className="text-blue-700 hover:text-blue-900 font-bold text-xs flex items-center gap-1"
+                  >
+                    <Plus size={13} />
+                    <span>{isRtl ? 'إضافة مهمة أخرى' : 'Add another task'}</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {formDynamicTasks.map((taskStr, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center font-bold text-[10px] shrink-0">
+                        {idx + 1}
+                      </span>
+                      <input
+                        type="text"
+                        value={taskStr}
+                        onChange={(e) => {
+                          const updated = [...formDynamicTasks];
+                          updated[idx] = e.target.value;
+                          setFormDynamicTasks(updated);
+                        }}
+                        placeholder={isRtl ? `بيان المهمة ${idx + 1}...` : `Task ${idx + 1}...`}
+                        className="flex-1 bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-semibold"
+                      />
+                      {formDynamicTasks.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = formDynamicTasks.filter((_, i) => i !== idx);
+                            setFormDynamicTasks(updated.length ? updated : ['']);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition shrink-0"
+                          title={isRtl ? 'حذف هذه المهمة' : 'Remove task'}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'المهمة الرئيسية الثانية' : 'Task 2'}</label>
-                <input type="text" name="task2" defaultValue={editingCommittee?.responsibilities?.[1] || ''} placeholder={isRtl ? 'تنسيق...' : 'Task...'} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5" />
-              </div>
-              <div className="flex gap-2 pt-2">
-                <button type="button" onClick={() => { setShowAddCommitteeModal(false); setEditingCommittee(null); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 font-bold">{isRtl ? 'إلغاء' : 'Cancel'}</button>
+
+              <div className="flex gap-2 pt-3 border-t border-gray-100">
+                <button type="button" onClick={() => { setShowAddCommitteeModal(false); setEditingCommittee(null); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 font-bold text-gray-600 hover:bg-gray-50">{isRtl ? 'إلغاء' : 'Cancel'}</button>
                 <button type="submit" className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition">
-                  {editingCommittee ? (isRtl ? 'حفظ التعديلات ✓' : 'Save Changes') : (isRtl ? 'حفظ اللجنة' : 'Save')}
+                  {editingCommittee ? (isRtl ? 'حفظ التعديلات ✓' : 'Save Changes') : (isRtl ? 'حفظ اللجنة' : 'Save Committee')}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Modal: Add / Edit Committee Member */}
+      {showAddMemberModal && selectedCommitteeId && (() => {
+        const activeCom = committees.find((c) => c.id === selectedCommitteeId);
+        if (!activeCom) return null;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-blue-100 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-black text-gray-900">
+                    {editingMember ? (isRtl ? 'تعديل بيانات العضو' : 'Edit Member') : (isRtl ? 'إضافة عضو جديد للجنة' : 'Add Committee Member')}
+                  </h3>
+                  <p className="text-xs text-blue-700 font-bold">{activeCom.name}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setShowAddMemberModal(false); setEditingMember(null); }}
+                  className="p-1.5 text-gray-400 hover:text-gray-700 rounded-xl transition"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form
+                key={editingMember ? editingMember.id : 'new-member'}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const fd = new FormData(e.target);
+                  handleSaveMember(activeCom.id, {
+                    id: editingMember?.id,
+                    name: fd.get('name'),
+                    phone: fd.get('phone') || '',
+                    role: fd.get('role') || (isRtl ? 'عضو ميداني' : 'Field Member')
+                  });
+                }}
+                className="space-y-3.5 text-xs"
+              >
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'اسم العضو (الرباعي أو الثلاثي)' : 'Member Name'}</label>
+                  <input
+                    type="text"
+                    name="name"
+                    defaultValue={editingMember?.name || ''}
+                    required
+                    placeholder={isRtl ? 'محمد سالم باحميد' : 'Full Name'}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'رقم الهاتف (للاتصال والتنسيق)' : 'Phone'}</label>
+                  <input
+                    type="text"
+                    name="phone"
+                    defaultValue={editingMember?.phone || ''}
+                    placeholder="770123456"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-mono"
+                    dir="ltr"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'الدور أو المهمة الميدانية' : 'Role / Duty'}</label>
+                  <input
+                    type="text"
+                    name="role"
+                    defaultValue={editingMember?.role || ''}
+                    placeholder={isRtl ? 'مسؤول السموار، منسق الساحة، تنظيم الضيوف...' : 'Role in committee...'}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => { setShowAddMemberModal(false); setEditingMember(null); }}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 transition"
+                  >
+                    {isRtl ? 'إلغاء' : 'Cancel'}
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition shadow-sm"
+                  >
+                    {editingMember ? (isRtl ? 'حفظ التعديلات ✓' : 'Save Changes') : (isRtl ? 'حفظ وإضافة العضو' : 'Save Member')}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Modal: Bulk Import Committee Members via Excel / CSV */}
+      {showImportExcelModal && selectedCommitteeId && (() => {
+        const activeCom = committees.find((c) => c.id === selectedCommitteeId);
+        if (!activeCom) return null;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-emerald-100 space-y-4 my-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                    <FileSpreadsheet size={20} className="text-emerald-600" />
+                    <span>{isRtl ? 'استيراد أعضاء اللجنة من ملف إكسل أو CSV' : 'Import Members from Excel / CSV'}</span>
+                  </h3>
+                  <p className="text-xs text-emerald-800 font-bold">{activeCom.name}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowImportExcelModal(false)}
+                  className="p-1.5 text-gray-400 hover:text-gray-700 rounded-xl transition"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Upload Drop Zone */}
+              <div className="border-2 border-dashed border-emerald-300 rounded-2xl p-6 bg-emerald-50/40 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+                  <UploadCloud size={24} />
+                </div>
+                <div>
+                  <p className="text-xs font-black text-gray-900 mb-1">
+                    {isRtl ? 'اختر ملف إكسل (.xlsx, .xls) أو ملف (.csv)' : 'Select Excel (.xlsx, .xls) or .csv file'}
+                  </p>
+                  <p className="text-[11px] text-gray-500">
+                    {isRtl ? 'يتعرف النظام تلقائياً على أعمدة: الاسم، رقم الهاتف، والدور' : 'Auto-detects columns: Name, Phone, and Role'}
+                  </p>
+                </div>
+
+                <label className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs cursor-pointer shadow-sm transition">
+                  <FileSpreadsheet size={15} />
+                  <span>{excelFileName ? excelFileName : (isRtl ? 'تحديد الملف من جهازك' : 'Choose File')}</span>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={handleExcelFileUpload}
+                    className="hidden"
+                  />
+                </label>
+
+                {excelFileName && (
+                  <p className="text-xs text-emerald-700 font-bold">
+                    ✓ {isRtl ? 'تم تحميل الملف:' : 'Selected:'} {excelFileName}
+                  </p>
+                )}
+              </div>
+
+              {/* Sample Template Download */}
+              <div className="flex items-center justify-between text-xs bg-gray-50 p-3 rounded-xl border border-gray-200">
+                <span className="text-gray-600 font-bold">{isRtl ? 'بحاجة لنموذج منظم جاهز للتعبئة؟' : 'Need a pre-formatted template?'}</span>
+                <button
+                  type="button"
+                  onClick={handleDownloadSampleCsv}
+                  className="text-emerald-700 hover:text-emerald-800 font-black flex items-center gap-1 hover:underline"
+                >
+                  <Download size={13} />
+                  <span>{isRtl ? 'تحميل نموذج تجريبي' : 'Download Template'}</span>
+                </button>
+              </div>
+
+              {excelError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2">
+                  <AlertCircle size={15} className="shrink-0" />
+                  <span>{excelError}</span>
+                </div>
+              )}
+
+              {/* Preview Table */}
+              {excelPreviewMembers.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-black text-gray-900">
+                    <span>{isRtl ? 'معاينة الأعضاء المستخرجين:' : 'Extracted Members Preview:'}</span>
+                    <span className="text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-lg">
+                      {isRtl ? `تم العثور على (${excelPreviewMembers.length}) عضو` : `${excelPreviewMembers.length} members found`}
+                    </span>
+                  </div>
+
+                  <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-xl divide-y divide-gray-100 text-xs">
+                    {excelPreviewMembers.map((m, idx) => (
+                      <div key={idx} className="p-2.5 flex items-center justify-between gap-2 bg-white">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-gray-400 font-mono text-[10px] w-5">{idx + 1}.</span>
+                          <strong className="text-gray-900 truncate">{m.name}</strong>
+                          <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{m.role}</span>
+                        </div>
+                        {m.phone && <span className="font-mono text-gray-500 text-[11px]" dir="ltr">{m.phone}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowImportExcelModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 transition"
+                >
+                  {isRtl ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="button"
+                  disabled={excelPreviewMembers.length === 0}
+                  onClick={() => handleConfirmImportExcel(activeCom.id)}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-bold transition shadow-sm"
+                >
+                  {isRtl ? `تأكيد واستيراد (${excelPreviewMembers.length}) عضو ✓` : `Import (${excelPreviewMembers.length}) Members ✓`}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Modal: PDF Report & Printable Document */}
+      {showPdfReportModal && selectedCommitteeId && (() => {
+        const activeCom = committees.find((c) => c.id === selectedCommitteeId);
+        if (!activeCom) return null;
+
+        const comTasks = (activeCom.tasks && activeCom.tasks.length > 0)
+          ? activeCom.tasks
+          : (activeCom.responsibilities || []).map((r, i) => ({ id: `task-${i}`, text: r, completed: false }));
+        const comMembers = activeCom.members || [];
+        const completedTasksCount = comTasks.filter((t) => t.completed).length;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
+            <div className="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-8 shadow-2xl border border-gray-200 space-y-6 my-8 max-h-[90vh] overflow-y-auto">
+              
+              {/* Header Action Bar */}
+              <div className="flex items-center justify-between gap-3 pb-4 border-b border-gray-200 print:hidden">
+                <div className="flex items-center gap-2">
+                  <Printer size={20} className="text-blue-700" />
+                  <h3 className="text-base font-black text-gray-900">
+                    {isRtl ? 'معاينة وثيقة وتكليف تقرير اللجنة (جاهز للطباعة وتصدير PDF)' : 'Printable Committee Report'}
+                  </h3>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white font-black text-xs rounded-xl shadow-md transition"
+                  >
+                    <Printer size={15} />
+                    <span>{isRtl ? '🖨️ طباعة / حفظ كملف PDF' : 'Print / Save as PDF'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPdfReportModal(false)}
+                    className="p-2 text-gray-400 hover:text-gray-700 rounded-xl transition"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* The Formal Document Paper Layout */}
+              <div id="printable-committee-report" className="space-y-6 p-6 sm:p-8 bg-gray-50/50 rounded-2xl border border-gray-200 print:bg-white print:p-0 print:border-none print:shadow-none font-sans">
+                {/* Official Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b-2 border-gray-800 text-center sm:text-right rtl:sm:text-right ltr:sm:text-left">
+                  <div>
+                    <span className="text-[11px] font-black uppercase tracking-wider text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded">
+                      {isRtl ? 'نظام إدارة الأعراس الجماعية - مراسيم' : 'Maraseem Mass Wedding Architecture'}
+                    </span>
+                    <h2 className="text-xl sm:text-2xl font-black text-gray-900 mt-1">
+                      {weddingInfo.title || (isRtl ? 'العرس الجماعي المشترك' : 'Mass Wedding')}
+                    </h2>
+                    <p className="text-xs text-gray-600 font-bold mt-0.5">
+                      {weddingInfo.organizer} • {weddingInfo.location} • {weddingInfo.date}
+                    </p>
+                  </div>
+
+                  <div className="text-left rtl:text-left ltr:text-right font-mono text-xs text-gray-500">
+                    <div>{isRtl ? 'تاريخ التقرير:' : 'Date:'} {new Date().toLocaleDateString('ar-EG')}</div>
+                    <div>{isRtl ? 'رقم اللجنة:' : 'Code:'} #{activeCom.id}</div>
+                  </div>
+                </div>
+
+                {/* Committee Info Banner */}
+                <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div>
+                    <span className="text-[10px] text-blue-800 font-extrabold uppercase">{isRtl ? 'وثيقة تكليف وقائمة أعضاء:' : 'Committee:'}</span>
+                    <h3 className="text-lg font-black text-blue-950">{activeCom.name}</h3>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3 font-bold text-gray-700">
+                    <div className="bg-white px-3 py-1.5 rounded-lg border border-blue-100">
+                      <span>{isRtl ? 'مشرف اللجنة: ' : 'Lead: '}</span>
+                      <strong className="text-gray-900">{activeCom.leader}</strong>
+                      {activeCom.phone && <span className="text-gray-500 ms-1 font-mono">({activeCom.phone})</span>}
+                    </div>
+                    <div className="bg-white px-3 py-1.5 rounded-lg border border-blue-100">
+                      <span>{isRtl ? 'إجمالي الأعضاء: ' : 'Members: '}</span>
+                      <strong className="text-blue-900">{comMembers.length}</strong>
+                    </div>
+                    <div className="bg-white px-3 py-1.5 rounded-lg border border-blue-100">
+                      <span>{isRtl ? 'إنجاز المهام: ' : 'Tasks: '}</span>
+                      <strong className="text-emerald-700">{completedTasksCount} / {comTasks.length}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Table 1: Committee Members */}
+                <div className="space-y-2">
+                  <h4 className="font-black text-sm text-gray-900 flex items-center gap-2">
+                    <span>👥</span>
+                    <span>{isRtl ? 'أولاً: قائمة أسماء أعضاء اللجنة الميدانية' : '1. Committee Members Roster'}</span>
+                  </h4>
+
+                  {comMembers.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic p-3 bg-white rounded-xl border border-gray-200">
+                      {isRtl ? 'لا يوجد أعضاء مسجلين بالاسم حتى الآن في هذه اللجنة.' : 'No members registered yet.'}
+                    </p>
+                  ) : (
+                    <table className="w-full text-right rtl:text-right ltr:text-left text-xs border border-gray-300 rounded-xl overflow-hidden">
+                      <thead className="bg-gray-100 font-black text-gray-800 border-b border-gray-300">
+                        <tr>
+                          <th className="p-2.5 w-12 text-center">#</th>
+                          <th className="p-2.5">{isRtl ? 'اسم العضو الرباعي' : 'Member Name'}</th>
+                          <th className="p-2.5">{isRtl ? 'رقم الهاتف' : 'Phone'}</th>
+                          <th className="p-2.5">{isRtl ? 'الدور / المهمة الميدانية' : 'Role'}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 bg-white">
+                        {comMembers.map((m, idx) => (
+                          <tr key={idx} className={idx % 2 === 1 ? 'bg-gray-50/50' : ''}>
+                            <td className="p-2.5 text-center font-bold text-gray-500">{idx + 1}</td>
+                            <td className="p-2.5 font-black text-gray-900">{m.name}</td>
+                            <td className="p-2.5 font-mono text-gray-700" dir="ltr">{m.phone || '—'}</td>
+                            <td className="p-2.5 text-gray-800 font-semibold">{m.role || (isRtl ? 'عضو ميداني' : 'Field Member')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                {/* Table 2: Tasks Checklist */}
+                <div className="space-y-2">
+                  <h4 className="font-black text-sm text-gray-900 flex items-center gap-2">
+                    <span>📋</span>
+                    <span>{isRtl ? 'ثانياً: بيان المهام والمسؤوليات الميدانية' : '2. Responsibilities & Operational Tasks'}</span>
+                  </h4>
+
+                  {comTasks.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic p-3 bg-white rounded-xl border border-gray-200">
+                      {isRtl ? 'لم تسجل أي مهام محددة لهذه اللجنة.' : 'No tasks recorded.'}
+                    </p>
+                  ) : (
+                    <table className="w-full text-right rtl:text-right ltr:text-left text-xs border border-gray-300 rounded-xl overflow-hidden">
+                      <thead className="bg-gray-100 font-black text-gray-800 border-b border-gray-300">
+                        <tr>
+                          <th className="p-2.5 w-12 text-center">#</th>
+                          <th className="p-2.5">{isRtl ? 'بيان المهمة الموكلة' : 'Task Description'}</th>
+                          <th className="p-2.5 w-28 text-center">{isRtl ? 'حالة الإنجاز' : 'Status'}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 bg-white">
+                        {comTasks.map((t, idx) => (
+                          <tr key={idx} className={idx % 2 === 1 ? 'bg-gray-50/50' : ''}>
+                            <td className="p-2.5 text-center font-bold text-gray-500">{idx + 1}</td>
+                            <td className="p-2.5 font-bold text-gray-900">{t.text || t}</td>
+                            <td className="p-2.5 text-center">
+                              <span className={`px-2 py-0.5 rounded font-black text-[10px] ${
+                                t.completed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                              }`}>
+                                {t.completed ? (isRtl ? 'مكتملة ✓' : 'Done ✓') : (isRtl ? 'قيد التنفيذ' : 'Pending')}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                {/* Signatures Strip */}
+                <div className="pt-8 border-t-2 border-gray-200 grid grid-cols-2 gap-8 text-center text-xs">
+                  <div className="space-y-8">
+                    <p className="font-black text-gray-800">{isRtl ? 'مشرف اللجنة الميدانية' : 'Committee Lead'}</p>
+                    <p className="text-gray-400 font-mono">...........................................</p>
+                  </div>
+                  <div className="space-y-8">
+                    <p className="font-black text-gray-800">{isRtl ? 'اعتماد رئيس اللجنة المنظمة العليا' : 'Approved by Head of Organizer'}</p>
+                    <p className="text-gray-400 font-mono">...........................................</p>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Footer Close Button */}
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-200 print:hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowPdfReportModal(false)}
+                  className="px-5 py-2.5 rounded-xl border border-gray-200 font-bold text-xs text-gray-600 hover:bg-gray-50 transition"
+                >
+                  {isRtl ? 'إغلاق المعاينة' : 'Close'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-5 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-black text-xs shadow-md transition flex items-center gap-2"
+                >
+                  <Printer size={16} />
+                  <span>{isRtl ? 'طباعة / تصدير PDF' : 'Print / Export'}</span>
+                </button>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Modal 3: Add / Edit Sponsor */}
       {showAddSponsorModal && (
