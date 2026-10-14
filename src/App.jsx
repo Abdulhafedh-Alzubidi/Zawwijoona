@@ -287,17 +287,12 @@ const dict = {
   }
 };
 
-// --- Gemini API Helper (Replace with your actual key) ---
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ''; // تأكد من إضافة مفتاح API في ملف .env
+// --- Gemini API Helper (Uses secure backend) ---
 const generateWithGemini = async (prompt) => {
-  if (!apiKey) {
-    console.warn("Gemini API key is missing. Simulating response.");
-    return new Promise(resolve => setTimeout(() => resolve("Simulated AI response. Please add your API key to src/App.jsx."), 1500));
-  }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-  const payload = { contents: [{ parts: [{ text: prompt }] }] };
+  const url = '/api/gemini';
+  const payload = { prompt };
 
-  let retries = 5;
+  let retries = 3;
   let delay = 1000;
   while (retries > 0) {
     try {
@@ -306,18 +301,35 @@ const generateWithGemini = async (prompt) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const data = await res.json();
-      if (data.candidates && data.candidates[0]) {
-        return data.candidates[0].content.parts[0].text;
+
+      // Handle the case where the serverless function isn't running (e.g. standard local dev server)
+      if (!res.ok && res.status === 404) {
+        console.warn("Backend API endpoint not found. Simulating response.");
+        return new Promise(resolve => setTimeout(() => resolve("Simulated AI response (Local Dev). Setup backend to use Gemini."), 1000));
       }
-      throw new Error("Invalid response");
+
+      const data = await res.json();
+
+      if (data.simulated) {
+          console.warn(data.text);
+          return new Promise(resolve => setTimeout(() => resolve(data.text), 1000));
+      }
+
+      if (data.text) {
+        return data.text;
+      }
+      throw new Error(data.error || "Invalid response");
     } catch (err) {
       retries--;
-      if (retries === 0) return null;
+      if (retries === 0) {
+          console.error("Gemini API call failed:", err);
+          return null;
+      }
       await new Promise(r => setTimeout(r, delay));
       delay *= 2;
     }
   }
+  return null;
 };
 
 export default function App() {
