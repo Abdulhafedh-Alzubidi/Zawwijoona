@@ -17,7 +17,8 @@ import {
 import CommandBroadcastHub from './CommandBroadcastHub';
 import CommitteeQrModal from './CommitteeQrModal';
 import CommitteePortalView from './CommitteePortalView';
-import { generateCommitteePortalUrl } from '../utils/portalHelpers';
+import { generateCommitteePortalUrl, syncCommitteeToPublicFirestore } from '../utils/portalHelpers';
+import { db } from '../firebase';
 
 export default function MassWeddingDashboard({
   data,
@@ -209,11 +210,13 @@ export default function MassWeddingDashboard({
   // --- Handlers: Committees ---
   const handleSaveCommittee = (comData) => {
     let updated;
+    const finalCom = { ...comData, id: comData.id || `com-${Date.now()}` };
     if (comData.id && committees.some((com) => com.id === comData.id)) {
       updated = committees.map((com) => (com.id === comData.id ? { ...com, ...comData } : com));
     } else {
-      updated = [...committees, { ...comData, id: comData.id || `com-${Date.now()}` }];
+      updated = [...committees, finalCom];
     }
+    syncCommitteeToPublicFirestore(db, finalCom, weddingInfo);
     onUpdateData({ ...data, committees: updated });
     setShowAddCommitteeModal(false);
     setEditingCommittee(null);
@@ -445,9 +448,18 @@ export default function MassWeddingDashboard({
   };
 
   const handleOpenQrModal = (committee) => {
+    syncCommitteeToPublicFirestore(db, committee, weddingInfo);
     const url = generateCommitteePortalUrl(committee, weddingInfo);
     setQrModalData({ committee, portalUrl: url });
   };
+
+  // مزامنة سحابية عامة لكافة اللجان لضمان فتح الروابط ورموز QR فوراً بدون حساب
+  React.useEffect(() => {
+    if (!committees || committees.length === 0) return;
+    committees.forEach((com) => {
+      syncCommitteeToPublicFirestore(db, com, weddingInfo);
+    });
+  }, [committees.length]);
 
   // --- Handlers: Sponsors & Expenses ---
   const handleSaveSponsor = (spData) => {

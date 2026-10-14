@@ -1,5 +1,6 @@
 // src/utils/portalHelpers.js
-// مساعدات إنشاء وفك تشفير روابط بوابات اللجان الميدانية المتوافقة مع اللغة العربية
+// مساعدات إنشاء وفك تشفير روابط بوابات اللجان الميدانية والمزامنة السحابية العامة
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 
 // رابط نقي وموجز جداً لضمان رمز QR سريع المسح وواضح على أي كاميرا هاتف
 export function getCleanCommitteePortalUrl(committee) {
@@ -8,12 +9,49 @@ export function getCleanCommitteePortalUrl(committee) {
   return `${baseUrl}?portal=committee&committeeId=${encodeURIComponent(committee.id)}`;
 }
 
-// رابط مع كود مضغوط خفيف للنسخ والمشاركة
-export function generateCommitteePortalUrl(committee, weddingInfo = {}) {
+// رابط مع كود بيانات مضغوط ذاتي التشغيل (يعمل بدون حساب وبدون إنترنت)
+export function getEncodedCommitteePortalUrl(committee, weddingInfo = {}) {
   const baseUrl = window.location.origin + window.location.pathname;
   if (!committee) return baseUrl;
 
-  // Cache in localStorage immediately so short URLs resolve everywhere on this origin
+  try {
+    const compactData = {
+      id: committee.id,
+      name: committee.name || '',
+      leader: committee.leader || '',
+      phone: committee.phone || '',
+      location: committee.location || '',
+      tasks: (committee.tasks && committee.tasks.length > 0)
+        ? committee.tasks.map((t) => ({ id: t.id, text: t.text, completed: !!t.completed }))
+        : (committee.responsibilities || []).map((r, i) => ({ id: `t-${i}`, text: r, completed: false })),
+      members: (committee.members || []).map((m) => ({
+        id: m.id,
+        name: m.name,
+        role: m.role || '',
+        phone: m.phone || '',
+      })),
+      weddingTitle: weddingInfo?.title || 'العرس الجماعي الخيري',
+      weddingDate: weddingInfo?.date || '',
+      organizer: weddingInfo?.organizer || 'اللجنة العليا المنظمة',
+    };
+
+    const jsonStr = JSON.stringify(compactData);
+    const b64 = btoa(
+      encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (_, p1) =>
+        String.fromCharCode(parseInt(p1, 16))
+      )
+    );
+
+    return `${baseUrl}?portal=committee&committeeId=${encodeURIComponent(committee.id)}&cdata=${encodeURIComponent(b64)}`;
+  } catch (err) {
+    console.error('Failed to encode committee data for URL:', err);
+    return getCleanCommitteePortalUrl(committee);
+  }
+}
+
+// الرابط الرئيسي المستخدم للمشاركة والمزامنة
+export function generateCommitteePortalUrl(committee, weddingInfo = {}) {
+  // تخزين محلي فوري
   try {
     localStorage.setItem(
       `maraseem_com_${committee.id}`,
@@ -28,10 +66,11 @@ export function generateCommitteePortalUrl(committee, weddingInfo = {}) {
     console.warn(e);
   }
 
-  // Use clean short URL for ultra-fast scanning and clean sharing
-  return getCleanCommitteePortalUrl(committee);
+  // إرجاع الرابط مع الكود المشفر الذاتي لضمان العمل 100% بدون حساب
+  return getEncodedCommitteePortalUrl(committee, weddingInfo);
 }
 
+// فك تشفير البيانات المشفرة ذاتياً داخل الرابط
 export function decodeCommitteePortalData(cdata) {
   if (!cdata) return null;
   try {
@@ -46,6 +85,48 @@ export function decodeCommitteePortalData(cdata) {
     console.error('Failed to decode committee portal data:', err);
     return null;
   }
+}
+
+// نشر بيانات اللجنة إلى قاعدة البيانات السحابية العامة للقراءة المفتوحة
+export async function syncCommitteeToPublicFirestore(db, committee, weddingInfo = {}) {
+  if (!db || !committee || !committee.id) return;
+  try {
+    const publicDocRef = doc(db, 'public_committees', committee.id);
+    const payload = {
+      id: committee.id,
+      name: committee.name || '',
+      nameEn: committee.nameEn || '',
+      leader: committee.leader || '',
+      phone: committee.phone || '',
+      location: committee.location || '',
+      tasks: (committee.tasks && committee.tasks.length > 0)
+        ? committee.tasks
+        : (committee.responsibilities || []).map((r, i) => ({ id: `t-${i}`, text: r, completed: false })),
+      members: committee.members || [],
+      weddingTitle: weddingInfo?.title || 'العرس الجماعي الخيري',
+      weddingDate: weddingInfo?.date || '',
+      organizer: weddingInfo?.organizer || 'اللجنة العليا المنظمة',
+      updatedAt: new Date().toISOString(),
+    };
+    await setDoc(publicDocRef, payload, { merge: true });
+  } catch (err) {
+    console.warn('Could not sync to public_committees in Firestore:', err);
+  }
+}
+
+// جلب بيانات اللجنة من السحاب العام للقراءة بدون حساب
+export async function fetchCommitteeFromPublicFirestore(db, committeeId) {
+  if (!db || !committeeId) return null;
+  try {
+    const publicDocRef = doc(db, 'public_committees', committeeId);
+    const snapshot = await getDoc(publicDocRef);
+    if (snapshot.exists()) {
+      return snapshot.data();
+    }
+  } catch (err) {
+    console.warn('Could not fetch from public_committees:', err);
+  }
+  return null;
 }
 
 // دالة موثوقة بنسبة 100% لتحميل الصور عبر Blob في جميع المتصفحات

@@ -19,7 +19,11 @@ import MassWeddingSetupModal from './components/MassWeddingSetupModal';
 import MassWeddingSetupScreen from './components/MassWeddingSetupScreen';
 import { DEFAULT_MASS_WEDDING_DATA } from './data/massWeddingTemplates';
 import CommitteePortalView from './components/CommitteePortalView';
-import { decodeCommitteePortalData } from './utils/portalHelpers';
+import {
+  decodeCommitteePortalData,
+  fetchCommitteeFromPublicFirestore,
+  syncCommitteeToPublicFirestore,
+} from './utils/portalHelpers';
 
 // --- Dictionary for Bilingual Support ---
 const dict = {
@@ -443,6 +447,10 @@ export default function App() {
   const [activePhotoGallery, setActivePhotoGallery] = useState(null);
   const [showAddCustomServiceModal, setShowAddCustomServiceModal] = useState(false);
 
+  // --- Public Committee Portal State (الوصول المباشر بدون حساب) ---
+  const [publicPortalCommittee, setPublicPortalCommittee] = useState(null);
+  const [isPublicPortalLoading, setIsPublicPortalLoading] = useState(false);
+
   // --- دوال التخزين المحلي الآمن لضمان عدم اختفاء البيانات ---
   const getCacheKey = (uid) => `zawwijoona_wedding_cache_${uid}`;
 
@@ -467,6 +475,59 @@ export default function App() {
     }
   };
 
+  // --- مراقب جلب بيانات اللجنة العامة سحابياً لتمكين الفتح المباشر بدون حساب ---
+  useEffect(() => {
+    const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const req = params && (params.get('portal') === 'committee' || !!params.get('committeeId'));
+    const comId = params ? params.get('committeeId') : null;
+    const cdata = params ? params.get('cdata') : null;
+
+    if (!req || !comId) return;
+
+    // 1. فك التشفير الذاتي إن وُجد
+    if (cdata) {
+      const decoded = decodeCommitteePortalData(cdata);
+      if (decoded) {
+        setPublicPortalCommittee(decoded);
+        return;
+      }
+    }
+
+    // 2. التحقق من التخزين المحلي إن وُجد
+    try {
+      const directCached = localStorage.getItem(`maraseem_com_${comId}`);
+      if (directCached) {
+        setPublicPortalCommittee(JSON.parse(directCached));
+        return;
+      }
+    } catch (e) { }
+
+    // 3. الجلب السحابي المباشر من مسار اللجان العامة
+    let isMounted = true;
+    setIsPublicPortalLoading(true);
+
+    fetchCommitteeFromPublicFirestore(db, comId)
+      .then((data) => {
+        if (isMounted) {
+          if (data) {
+            setPublicPortalCommittee(data);
+            try {
+              localStorage.setItem(`maraseem_com_${comId}`, JSON.stringify(data));
+            } catch (e) { }
+          }
+          setIsPublicPortalLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to fetch public committee:', err);
+        if (isMounted) setIsPublicPortalLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // --- دالة موحدة لتطبيق بيانات المستخدم على واجهة التطبيق ---
   const applyUserData = (data) => {
     if (!data) return;
@@ -480,7 +541,15 @@ export default function App() {
       setIsSetupComplete(false);
     }
 
-    if (data.massWeddingData) setMassWeddingData(data.massWeddingData);
+    if (data.massWeddingData) {
+      setMassWeddingData(data.massWeddingData);
+      try {
+        localStorage.setItem('maraseem_latest_mass_wedding_data', JSON.stringify(data.massWeddingData));
+        (data.massWeddingData.committees || []).forEach((com) => {
+          syncCommitteeToPublicFirestore(db, com, data.massWeddingData.info);
+        });
+      } catch (e) { }
+    }
     if (data.guests) setGuests(data.guests);
     if (data.expenses) setExpenses(data.expenses);
     if (data.events) setEvents(data.events);
@@ -605,6 +674,20 @@ export default function App() {
     setMassWeddingData(newMassData);
     try {
       localStorage.setItem('maraseem_latest_mass_wedding_data', JSON.stringify(newMassData));
+      // نشر ومزامنة كل لجنة سحابياً للقراءة العامة ومحلياً
+      (newMassData.committees || []).forEach((com) => {
+        try {
+          localStorage.setItem(`maraseem_com_${com.id}`, JSON.stringify({
+            ...com,
+            weddingTitle: newMassData.info?.title,
+            weddingDate: newMassData.info?.date,
+            organizer: newMassData.info?.organizer,
+          }));
+          syncCommitteeToPublicFirestore(db, com, newMassData.info);
+        } catch (err) {
+          console.warn(err);
+        }
+      });
     } catch (e) {
       console.warn("فشل حفظ نسخة العرس الجماعي للبوابات:", e);
     }
@@ -1862,68 +1945,85 @@ export default function App() {
     );
   };
 
-  // --- التحقق من طلب بوابة اللجنة الميدانية المستقلة (وصول فوري للأعضاء والمتطوعين عبر واتساب) ---
+  // --- التحقق من طلب بوابة اللجنة الميدانية المستقلة (وصول فوري للأعضاء والمتطوعين بدون حساب) ---
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const isPortalRequested = urlParams && (urlParams.get('portal') === 'committee' || !!urlParams.get('committeeId'));
   const portalCommitteeId = urlParams ? urlParams.get('committeeId') : null;
   const portalCdata = urlParams ? urlParams.get('cdata') : null;
 
   if (isPortalRequested) {
-    let portalCommittee = decodeCommitteePortalData(portalCdata);
+    let resolvedCommittee = publicPortalCommittee;
     let weddingTitle = 'العرس الجماعي الخيري';
     let weddingDate = '';
     let organizer = 'اللجنة العليا المنظمة';
 
-    if (portalCommittee) {
-      weddingTitle = portalCommittee.weddingTitle || weddingTitle;
-      weddingDate = portalCommittee.weddingDate || weddingDate;
-      organizer = portalCommittee.organizer || organizer;
-    } else {
-      const findInList = (list) => (list || []).find((c) => c.id === portalCommitteeId);
-      portalCommittee = findInList(massWeddingData?.committees);
-      if (!portalCommittee && portalCommitteeId) {
-        try {
-          const directCom = localStorage.getItem(`maraseem_com_${portalCommitteeId}`);
-          if (directCom) {
-            portalCommittee = JSON.parse(directCom);
-            if (portalCommittee.weddingTitle) weddingTitle = portalCommittee.weddingTitle;
-            if (portalCommittee.weddingDate) weddingDate = portalCommittee.weddingDate;
-            if (portalCommittee.organizer) organizer = portalCommittee.organizer;
-          }
-        } catch (e) {
-          console.warn(e);
-        }
-      }
-      if (!portalCommittee) {
-        try {
-          const cached = localStorage.getItem('maraseem_latest_mass_wedding_data');
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            portalCommittee = findInList(parsed?.committees);
-            if (parsed?.info) {
-              weddingTitle = parsed.info.title || weddingTitle;
-              weddingDate = parsed.info.date || weddingDate;
-              organizer = parsed.info.organizer || organizer;
-            }
-          }
-        } catch (e) {
-          console.warn(e);
-        }
-      }
+    // 1. إذا لم يُجلب بعد، فحص cdata المضمن في الرابط
+    if (!resolvedCommittee && portalCdata) {
+      resolvedCommittee = decodeCommitteePortalData(portalCdata);
     }
 
-    if (portalCommittee) {
+    // 2. فحص ذاكرة اللجان الحالية
+    if (!resolvedCommittee && portalCommitteeId) {
+      const findInList = (list) => (list || []).find((c) => c.id === portalCommitteeId);
+      resolvedCommittee = findInList(massWeddingData?.committees);
+    }
+
+    // 3. فحص التخزين المباشر للجنة
+    if (!resolvedCommittee && portalCommitteeId) {
+      try {
+        const directCom = localStorage.getItem(`maraseem_com_${portalCommitteeId}`);
+        if (directCom) {
+          resolvedCommittee = JSON.parse(directCom);
+        }
+      } catch (e) { }
+    }
+
+    // 4. فحص كاش العرس الجماعي
+    if (!resolvedCommittee && portalCommitteeId) {
+      try {
+        const cached = localStorage.getItem('maraseem_latest_mass_wedding_data');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          resolvedCommittee = (parsed?.committees || []).find((c) => c.id === portalCommitteeId);
+        }
+      } catch (e) { }
+    }
+
+    if (resolvedCommittee) {
+      weddingTitle = resolvedCommittee.weddingTitle || massWeddingData?.info?.title || weddingTitle;
+      weddingDate = resolvedCommittee.weddingDate || massWeddingData?.info?.date || weddingDate;
+      organizer = resolvedCommittee.organizer || massWeddingData?.info?.organizer || organizer;
+    }
+
+    // شاشة تحميل أنيقة أثناء جلب البيانات السحابية العامة
+    if (isPublicPortalLoading && !resolvedCommittee) {
       return (
-        <CommitteePortalView
-          committee={portalCommittee}
-          weddingTitle={weddingTitle}
-          weddingDate={weddingDate}
-          organizer={organizer}
-          isStandalone={true}
-          isRtl={isRtl}
-        />
+        <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 text-white" dir={isRtl ? 'rtl' : 'ltr'}>
+          <div className="flex flex-col items-center gap-4 max-w-sm text-center">
+            <div className="w-16 h-16 rounded-3xl bg-amber-500/20 border border-amber-400/40 text-amber-400 flex items-center justify-center font-black text-2xl shadow-lg">
+              م
+            </div>
+            <div className="w-10 h-10 border-4 border-amber-400 border-t-transparent rounded-full animate-spin mt-2"></div>
+            <h3 className="font-black text-lg text-white">جاري فتح بوابة اللجنة الميدانية...</h3>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              يتم جلب بيانات وتوجيهات لجنتك مباشرة بدون الحاجة لتسجيل دخول
+            </p>
+          </div>
+        </div>
       );
     }
+
+    // عرض بوابة اللجنة مباشرة (منع الانتقال لصفحة تسجيل الدخول نهائياً)
+    return (
+      <CommitteePortalView
+        committee={resolvedCommittee}
+        weddingTitle={weddingTitle}
+        weddingDate={weddingDate}
+        organizer={organizer}
+        isStandalone={true}
+        isRtl={isRtl}
+      />
+    );
   }
 
   // Auth loading check
