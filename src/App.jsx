@@ -112,6 +112,10 @@ const dict = {
     addGuest: "إضافة ضيف",
     guestName: "اسم ممثل العائلة",
     accompanying: "المرافقين",
+    menGuests: "إجمالي الرجال",
+    womenGuests: "إجمالي النساء",
+    menAccompanying: "مرافقين رجال",
+    womenAccompanying: "مرافقات نساء",
     designInvite: "دعوة",
     importCsv: "استيراد من CSV",
     actions: "إجراءات",
@@ -243,6 +247,10 @@ const dict = {
     addGuest: "Add Guest",
     guestName: "Family Rep Name",
     accompanying: "Accompanying",
+    menGuests: "Total Men",
+    womenGuests: "Total Women",
+    menAccompanying: "Men Companions",
+    womenAccompanying: "Women Companions",
     designInvite: "Invite",
     importCsv: "Import CSV",
     actions: "Actions",
@@ -1208,6 +1216,17 @@ export default function App() {
   };
 
   const GuestsTab = () => {
+    const getGuestStats = (g) => {
+      const isFemale = g.gender === 'female';
+      const menAcc = Number(g.menAccompanying !== undefined ? g.menAccompanying : (g.accompanying !== undefined ? g.accompanying : 0));
+      const womenAcc = Number(g.womenAccompanying || 0);
+      const totalAcc = menAcc + womenAcc;
+      const men = isFemale ? menAcc : (menAcc + 1);
+      const women = isFemale ? (womenAcc + 1) : womenAcc;
+      const total = men + women;
+      return { isFemale, menAcc, womenAcc, totalAcc, men, women, total };
+    };
+
     const handleFileUpload = (event) => {
       const file = event.target.files[0];
       if (file) {
@@ -1225,6 +1244,9 @@ export default function App() {
           const nameKey = headers.find(h => ['name', 'Name', 'الاسم', 'اسم العائلة', 'اسم الضيف'].includes(h));
           const sideKey = headers.find(h => ['side', 'Side', 'الجهة', 'إجراء', 'القرابة'].includes(h));
           const accKey = headers.find(h => ['accompanying', 'Accompanying', 'المرافقين', 'عدد المرافقين', 'المرافقون'].includes(h));
+          const menKey = headers.find(h => ['men', 'Men', 'رجال', 'المرافقين رجال', 'مرافقين رجال', 'مرافقين (رجال)', 'عدد الرجال'].includes(h));
+          const womenKey = headers.find(h => ['women', 'Women', 'نساء', 'المرافقين نساء', 'مرافقات', 'مرافقات نساء', 'مرافقين (نساء)', 'عدد النساء'].includes(h));
+          const genderKey = headers.find(h => ['gender', 'Gender', 'النوع', 'الجنس', 'صفة الممثل'].includes(h));
 
           for (let i = 1; i < lines.length; i++) {
             const currentLine = lines[i].split(',').map(val => val.trim().replace(/^"|"$/g, ''));
@@ -1248,15 +1270,37 @@ export default function App() {
               mappedSide = 'brideSide';
             }
 
-            // Fallback to second column if accompanying key is missing
+            let rawMen = menKey ? row[menKey] : '';
+            let rawWomen = womenKey ? row[womenKey] : '';
             let rawAcc = accKey ? row[accKey] : currentLine[1];
+
+            let parsedMen = parseInt(rawMen, 10);
+            let parsedWomen = parseInt(rawWomen, 10);
             let parsedAcc = parseInt(rawAcc, 10);
-            if (isNaN(parsedAcc)) parsedAcc = 0; // Prevent NaN errors
+            if (isNaN(parsedAcc)) parsedAcc = 0;
+
+            if (isNaN(parsedMen) && isNaN(parsedWomen)) {
+              parsedMen = parsedAcc;
+              parsedWomen = 0;
+            } else {
+              if (isNaN(parsedMen)) parsedMen = 0;
+              if (isNaN(parsedWomen)) parsedWomen = 0;
+              parsedAcc = parsedMen + parsedWomen;
+            }
+
+            let rawGender = (genderKey ? row[genderKey] : '').trim().toLowerCase();
+            let mappedGender = 'male';
+            if (rawGender.includes('أنثى') || rawGender.includes('انثى') || rawGender.includes('امرأة') || rawGender.includes('سيدة') || rawGender.includes('female')) {
+              mappedGender = 'female';
+            }
 
             parsedGuests.push({
               id: Date.now() + i,
               name: guestName,
               side: mappedSide,
+              gender: mappedGender,
+              menAccompanying: parsedMen,
+              womenAccompanying: parsedWomen,
               accompanying: parsedAcc,
               status: 'pending'
             });
@@ -1273,9 +1317,11 @@ export default function App() {
       }
     };
 
-    const totalGroomSide = guests.filter(g => g.side === 'groomSide').reduce((sum, g) => sum + 1 + (g.accompanying || 0), 0);
-    const totalBrideSide = guests.filter(g => g.side === 'brideSide').reduce((sum, g) => sum + 1 + (g.accompanying || 0), 0);
+    const totalGroomSide = guests.filter(g => g.side === 'groomSide').reduce((sum, g) => sum + getGuestStats(g).total, 0);
+    const totalBrideSide = guests.filter(g => g.side === 'brideSide').reduce((sum, g) => sum + getGuestStats(g).total, 0);
     const totalAllGuests = totalGroomSide + totalBrideSide;
+    const totalMen = guests.reduce((sum, g) => sum + getGuestStats(g).men, 0);
+    const totalWomen = guests.reduce((sum, g) => sum + getGuestStats(g).women, 0);
 
     return (
       <div className="space-y-6">
@@ -1293,18 +1339,31 @@ export default function App() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 text-center">
-            <p className="text-amber-800 font-bold mb-1">{lang === 'ar' ? 'إجمالي الضيوف' : 'Total Guests'}</p>
+        {/* كروت الإحصائيات: حفظ تقسيم أهل العريس والعروس بالكامل + إظهار إجمالي الرجال والنساء */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+          <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 text-center col-span-2 sm:col-span-1">
+            <p className="text-amber-800 font-bold text-sm mb-1">{lang === 'ar' ? 'إجمالي الضيوف' : 'Total Guests'}</p>
             <p className="text-2xl font-black text-amber-900">{totalAllGuests}</p>
           </div>
           <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center">
-            <p className="text-blue-800 font-bold mb-1">{t.groomSide}</p>
+            <p className="text-blue-800 font-bold text-sm mb-1">{t.groomSide}</p>
             <p className="text-2xl font-black text-blue-900">{totalGroomSide}</p>
           </div>
           <div className="bg-rose-50 p-4 rounded-xl border border-rose-100 text-center">
-            <p className="text-rose-800 font-bold mb-1">{t.brideSide}</p>
+            <p className="text-rose-800 font-bold text-sm mb-1">{t.brideSide}</p>
             <p className="text-2xl font-black text-rose-900">{totalBrideSide}</p>
+          </div>
+          <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 text-center">
+            <p className="text-indigo-800 font-bold text-sm mb-1 flex items-center justify-center gap-1">
+              <span>👨</span> {t.menGuests}
+            </p>
+            <p className="text-2xl font-black text-indigo-900">{totalMen}</p>
+          </div>
+          <div className="bg-pink-50 p-4 rounded-xl border border-pink-100 text-center">
+            <p className="text-pink-800 font-bold text-sm mb-1 flex items-center justify-center gap-1">
+              <span>👩</span> {t.womenGuests}
+            </p>
+            <p className="text-2xl font-black text-pink-900">{totalWomen}</p>
           </div>
         </div>
 
@@ -1314,40 +1373,70 @@ export default function App() {
               <thead className="bg-amber-50/50 border-b border-amber-100 text-amber-800">
                 <tr>
                   <th className={`p-4 font-bold ${isRtl ? 'text-right' : 'text-left'}`}>{t.guestName}</th>
-                  <th className={`p-4 font-bold text-center`}>{t.accompanying}</th>
+                  <th className={`p-4 font-bold text-center`}>{t.accompanying} ({isRtl ? 'رجال ونساء' : 'Men & Women'})</th>
+                  <th className="p-4 font-bold text-center">{isRtl ? 'إجمالي الأفراد' : 'Total'}</th>
                   <th className="p-4 font-bold text-center">{t.actions}</th>
                 </tr>
               </thead>
               <tbody>
                 {guests.length === 0 ? (
                   <tr>
-                    <td colSpan="3" className="p-8 text-center text-gray-500">لا يوجد ضيوف مضافين بعد.</td>
+                    <td colSpan="4" className="p-8 text-center text-gray-500">لا يوجد ضيوف مضافين بعد.</td>
                   </tr>
                 ) : (
-                  guests.map((guest, idx) => (
-                    <tr key={guest.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="p-4 font-bold text-gray-800">{guest.name}</td>
-                      <td className="p-4 text-center font-bold text-amber-600 bg-amber-50/30">+{guest.accompanying}</td>
-                      <td className="p-4 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => { setEditingGuest(guest); setShowGuestModal(true); }}
-                            className="text-gray-400 hover:text-amber-600 p-1.5 rounded-lg transition"
-                            title={isRtl ? 'تعديل بيانات الضيف' : 'Edit Guest'}
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteGuest(guest.id)}
-                            className="text-gray-400 hover:text-red-500 p-1.5 rounded-lg transition"
-                            title={isRtl ? 'حذف الضيف' : 'Delete Guest'}
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                  guests.map((guest) => {
+                    const stats = getGuestStats(guest);
+                    return (
+                      <tr key={guest.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="p-4 font-bold text-gray-800">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span>{guest.name}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${guest.side === 'brideSide' ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
+                              {guest.side === 'brideSide' ? t.brideSide : t.groomSide}
+                            </span>
+                            {stats.isFemale && (
+                              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-pink-100 text-pink-700">
+                                👩 {isRtl ? 'سيدة' : 'Female'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="inline-flex items-center gap-2 flex-wrap justify-center text-xs sm:text-sm font-bold">
+                            <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg border border-indigo-100" title={isRtl ? 'مرافقين رجال' : 'Male companions'}>
+                              👨 <strong>+{stats.menAcc}</strong>
+                              <span className="text-[11px] font-normal text-indigo-600">{isRtl ? 'رجال' : 'men'}</span>
+                            </span>
+                            <span className="inline-flex items-center gap-1 bg-pink-50 text-pink-700 px-2.5 py-1 rounded-lg border border-pink-100" title={isRtl ? 'مرافقات نساء' : 'Female companions'}>
+                              👩 <strong>+{stats.womenAcc}</strong>
+                              <span className="text-[11px] font-normal text-pink-600">{isRtl ? 'نساء' : 'women'}</span>
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-4 text-center font-black text-amber-700 bg-amber-50/30">
+                          {stats.total}
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => { setEditingGuest(guest); setShowGuestModal(true); }}
+                              className="text-gray-400 hover:text-amber-600 p-1.5 rounded-lg transition"
+                              title={isRtl ? 'تعديل بيانات الضيف' : 'Edit Guest'}
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteGuest(guest.id)}
+                              className="text-gray-400 hover:text-red-500 p-1.5 rounded-lg transition"
+                              title={isRtl ? 'حذف الضيف' : 'Delete Guest'}
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -2498,11 +2587,19 @@ export default function App() {
               e.preventDefault();
               const formData = new FormData(e.target);
 
+              const menAcc = Math.max(0, Number(formData.get('menAccompanying')) || 0);
+              const womenAcc = Math.max(0, Number(formData.get('womenAccompanying')) || 0);
+              const totalAcc = menAcc + womenAcc;
+              const gender = formData.get('gender') || 'male';
+
               const guestData = {
                 id: editingGuest ? editingGuest.id : Date.now(),
                 name: formData.get('name'),
                 side: formData.get('side'),
-                accompanying: Number(formData.get('accompanying')) || 0,
+                gender: gender,
+                menAccompanying: menAcc,
+                womenAccompanying: womenAcc,
+                accompanying: totalAcc,
                 status: editingGuest ? (editingGuest.status || 'pending') : 'pending'
               };
 
@@ -2520,21 +2617,79 @@ export default function App() {
             }} className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.guestName}</label>
-                <input type="text" name="name" defaultValue={editingGuest?.name || ''} required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none font-bold" />
+                <input
+                  type="text"
+                  name="name"
+                  defaultValue={editingGuest?.name || ''}
+                  required
+                  placeholder={isRtl ? 'مثال: سالم باوزير أو عائلة فلان' : 'e.g. Salem Bawazir'}
+                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none font-bold"
+                />
               </div>
-              <div className="flex gap-4">
-                <div className="flex-1">
+
+              {/* تقسيم أهل العريس والعروسة كما هو تماماً + صفة الممثل */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">{isRtl ? 'الجهة' : 'Side'}</label>
                   <select name="side" defaultValue={editingGuest?.side || 'groomSide'} className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none bg-white font-bold">
                     <option value="groomSide">{t.groomSide}</option>
                     <option value="brideSide">{t.brideSide}</option>
                   </select>
                 </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-bold text-gray-700 mb-1">{t.accompanying}</label>
-                  <input type="number" name="accompanying" defaultValue={editingGuest?.accompanying !== undefined ? editingGuest.accompanying : 0} min="0" className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none font-bold" />
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">{isRtl ? 'صفة الممثل' : 'Rep. Gender'}</label>
+                  <select name="gender" defaultValue={editingGuest?.gender || 'male'} className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none bg-white font-bold">
+                    <option value="male">{isRtl ? '👨 رجل' : '👨 Male'}</option>
+                    <option value="female">{isRtl ? '👩 سيدة / امرأة' : '👩 Female'}</option>
+                  </select>
                 </div>
               </div>
+
+              {/* قسم المرافقين مقسوم إلى رجال ونساء */}
+              <div className="bg-amber-50/70 p-4 rounded-2xl border border-amber-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-black text-amber-900">
+                    {t.accompanying} ({isRtl ? 'المرافقين الإضافيين' : 'Plus-Ones'})
+                  </label>
+                  <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                    {isRtl ? 'رجال ونساء' : 'Men & Women'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-indigo-900 mb-1">
+                      {isRtl ? '👨 مرافقين (رجال)' : '👨 Men'}
+                    </label>
+                    <input
+                      type="number"
+                      name="menAccompanying"
+                      defaultValue={editingGuest?.menAccompanying !== undefined ? editingGuest.menAccompanying : (editingGuest?.accompanying !== undefined ? editingGuest.accompanying : 0)}
+                      min="0"
+                      className="w-full border border-indigo-200 rounded-xl p-2.5 focus:ring-2 focus:ring-indigo-500 outline-none font-bold bg-white text-indigo-950"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-pink-900 mb-1">
+                      {isRtl ? '👩 مرافقات (نساء)' : '👩 Women'}
+                    </label>
+                    <input
+                      type="number"
+                      name="womenAccompanying"
+                      defaultValue={editingGuest?.womenAccompanying !== undefined ? editingGuest.womenAccompanying : 0}
+                      min="0"
+                      className="w-full border border-pink-200 rounded-xl p-2.5 focus:ring-2 focus:ring-pink-500 outline-none font-bold bg-white text-pink-950"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-amber-800/80 font-medium">
+                  {isRtl
+                    ? '* إجمالي الدعوة = ممثل العائلة (1) + عدد المرافقين (رجال ونساء)'
+                    : '* Total invite attendees = Representative (1) + Companions (Men & Women)'}
+                </p>
+              </div>
+
               <div className="flex justify-end gap-2 mt-6">
                 <button type="button" onClick={() => { setShowGuestModal(false); setEditingGuest(null); }} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition">{t.cancel}</button>
                 <button type="submit" className="px-5 py-2.5 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition">
