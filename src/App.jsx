@@ -10,7 +10,8 @@ import {
   Menu, X, Sparkles, Loader2, Copy, HeartHandshake, Image as ImageIcon, FileText,
   MessageCircle, Send, Upload, FileSpreadsheet,
   Phone, ExternalLink, Camera, Music, Flower2, UtensilsCrossed, Utensils, Coins, Calendar, Users2, Search,
-  Building2, Eye, BookmarkCheck, BookmarkPlus, Check, Star, AlertCircle, Edit2
+  Building2, Eye, BookmarkCheck, BookmarkPlus, Check, Star, AlertCircle, Edit2,
+  Scissors, Mail, Car, Bed, Tent
 } from 'lucide-react';
 import { SERVICE_CATEGORIES, SERVICE_TEMPLATES, createWhatsAppInquiryLink } from './data/servicesData';
 import WeddingModeSelector from './components/WeddingModeSelector';
@@ -1582,7 +1583,12 @@ export default function App() {
         case 'sound_media': return <Music size={size} />;
         case 'photography': return <Camera size={size} />;
         case 'catering': return <UtensilsCrossed size={size} />;
+        case 'rentals': return <Tent size={size} />;
         case 'beauty': return <Sparkles size={size} />;
+        case 'groom_care': return <Scissors size={size} />;
+        case 'invitations': return <Mail size={size} />;
+        case 'car_decor': return <Car size={size} />;
+        case 'furniture': return <Bed size={size} />;
         default: return <Sparkles size={size} />;
       }
     };
