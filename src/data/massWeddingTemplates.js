@@ -274,6 +274,8 @@ export const DEFAULT_MASS_WEDDING_DATA = {
     isConfigured: false
   },
   couples: [],
+  grooms: [],
+  brides: [],
   committees: DEFAULT_MASS_WEDDING_COMMITTEES.map(c => ({ ...c })),
   sponsorships: [],
   expenses: [],
@@ -284,7 +286,7 @@ export const DEFAULT_MASS_WEDDING_DATA = {
   }
 };
 
-// --- حاسبة التموين والوليمة الكبرى واللوجستيات (مبنية بدقة على حاصل جمع ضيوف العرسان) ---
+// --- حاسبة التموين والوليمة الكبرى واللوجستيات (مبنية بدقة على حاصل جمع ضيوف العرسان والعرائس) ---
 export function calculateMassWeddingLogistics(
   couplesOrCount,
   weddingInfo = {},
@@ -294,7 +296,7 @@ export function calculateMassWeddingLogistics(
   // دمج المعدلات المخصصة مع الافتراضية
   const rates = { ...DEFAULT_CALCULATOR_RATES, ...(customRates || {}) };
 
-  // 1. حساب إجمالي عدد الضيوف الفعلي عبر جمع كوتة كل عريس مسجل
+  // 1. حساب إجمالي عدد الضيوف الفعلي عبر جمع كوتة كل عريس وعروس مسجلين
   let couplesGuests = 0;
   let couplesCount = 0;
 
@@ -302,6 +304,32 @@ export function calculateMassWeddingLogistics(
     couplesCount = couplesOrCount.length;
     if (couplesCount > 0) {
       couplesGuests = couplesOrCount.reduce((sum, c) => {
+        const quota = c.guestQuota !== undefined && c.guestQuota !== '' && c.guestQuota !== null
+          ? Number(c.guestQuota)
+          : (Number(weddingInfo?.guestQuotaPerCouple) || 0);
+        return sum + (Number.isNaN(quota) ? 0 : quota);
+      }, 0);
+    } else if (weddingInfo?.targetCouples && weddingInfo?.guestQuotaPerCouple) {
+      couplesCount = Number(weddingInfo.targetCouples) || 0;
+      couplesGuests = (Number(weddingInfo.targetCouples) || 0) * (Number(weddingInfo.guestQuotaPerCouple) || 0);
+    }
+  } else if (couplesOrCount && typeof couplesOrCount === 'object' && (couplesOrCount.grooms || couplesOrCount.brides || couplesOrCount.couples)) {
+    const gList = couplesOrCount.grooms || [];
+    const bList = couplesOrCount.brides || [];
+    const legacyCouples = couplesOrCount.couples || [];
+
+    if (gList.length > 0 || bList.length > 0) {
+      couplesCount = Math.max(gList.length, bList.length);
+      const sumList = (list) => list.reduce((sum, item) => {
+        const q = item.guestQuota !== undefined && item.guestQuota !== '' && item.guestQuota !== null
+          ? Number(item.guestQuota)
+          : (Number(weddingInfo?.guestQuotaPerCouple) || 0);
+        return sum + (Number.isNaN(q) ? 0 : q);
+      }, 0);
+      couplesGuests = sumList(gList) + sumList(bList);
+    } else if (legacyCouples.length > 0) {
+      couplesCount = legacyCouples.length;
+      couplesGuests = legacyCouples.reduce((sum, c) => {
         const quota = c.guestQuota !== undefined && c.guestQuota !== '' && c.guestQuota !== null
           ? Number(c.guestQuota)
           : (Number(weddingInfo?.guestQuotaPerCouple) || 0);

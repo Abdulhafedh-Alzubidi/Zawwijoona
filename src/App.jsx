@@ -973,7 +973,7 @@ export default function App() {
 
   const massNavItems = [
     { id: 'overview', icon: <Sparkles size={20} />, label: isRtl ? 'نظرة عامة' : 'Overview' },
-    { id: 'couples', icon: <Users2 size={20} />, label: isRtl ? `سجل العرسان (${massWeddingData.couples?.length || 0})` : `Couples (${massWeddingData.couples?.length || 0})` },
+    { id: 'couples', icon: <Users2 size={20} />, label: isRtl ? `العرسان والعرائس (${(massWeddingData.grooms?.length || 0) + (massWeddingData.brides?.length || 0) || (massWeddingData.couples?.length || 0)})` : `Grooms & Brides (${(massWeddingData.grooms?.length || 0) + (massWeddingData.brides?.length || 0) || (massWeddingData.couples?.length || 0)})` },
     { id: 'committees', icon: <HeartHandshake size={20} />, label: isRtl ? `اللجان الميدانية (${massWeddingData.committees?.length || 0})` : `Committees (${massWeddingData.committees?.length || 0})` },
     { id: 'logistics', icon: <Utensils size={20} />, label: isRtl ? 'حاسبة الوليمة والتموين' : 'Rations & Logistics' },
     { id: 'budget', icon: <Coins size={20} />, label: isRtl ? 'الميزانية والرعايات' : 'Budget & Sponsors' },
