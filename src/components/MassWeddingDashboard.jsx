@@ -12,7 +12,8 @@ import {
 import {
   calculateMassWeddingLogistics,
   DEFAULT_CALCULATOR_RATES,
-  DEFAULT_CUSTOM_LOGISTICS_ITEMS
+  DEFAULT_CUSTOM_LOGISTICS_ITEMS,
+  DEFAULT_MASS_WEDDING_COMMITTEES
 } from '../data/massWeddingTemplates';
 import CommandBroadcastHub from './CommandBroadcastHub';
 import CommitteeQrModal from './CommitteeQrModal';
@@ -60,6 +61,11 @@ export default function MassWeddingDashboard({
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
   const [showImportExcelModal, setShowImportExcelModal] = useState(false);
+  const [showBulkImportCommitteesModal, setShowBulkImportCommitteesModal] = useState(false);
+  const [bulkExcelCommittees, setBulkExcelCommittees] = useState([]);
+  const [bulkExcelMode, setBulkExcelMode] = useState('append'); // 'append' | 'replace'
+  const [bulkExcelFileName, setBulkExcelFileName] = useState('');
+  const [bulkExcelError, setBulkExcelError] = useState('');
   const [showPdfReportModal, setShowPdfReportModal] = useState(false);
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [excelPreviewMembers, setExcelPreviewMembers] = useState([]);
@@ -229,6 +235,141 @@ export default function MassWeddingDashboard({
       : (committee.responsibilities || ['']);
     setFormDynamicTasks(existingTasks.length > 0 ? existingTasks : ['']);
     setShowAddCommitteeModal(true);
+  };
+
+  // إدراج اللجان الميدانية الافتراضية الـ 14 (لجنة الصالة، العقد، السامان، العشاء، النظام، الفرش، الماء البارد، المغاسيل، العرسان، الذبح، الطبخ، المسرح، الإعلام، الصحة)
+  const handleLoadDefaultCommittees = (replace = false) => {
+    const freshDefaults = DEFAULT_MASS_WEDDING_COMMITTEES.map((c, idx) => ({
+      ...c,
+      id: `com-${c.id.replace('com-', '')}-${Date.now().toString(36)}-${idx}`
+    }));
+
+    let updated;
+    if (replace || committees.length === 0) {
+      updated = freshDefaults;
+    } else {
+      const existingNames = new Set(committees.map(c => c.name.trim().toLowerCase()));
+      const toAdd = freshDefaults.filter(c => !existingNames.has(c.name.trim().toLowerCase()));
+      if (toAdd.length === 0) {
+        alert(isRtl ? 'كافة اللجان الافتراضية مضافة بالفعل!' : 'All default committees are already added!');
+        return;
+      }
+      updated = [...committees, ...toAdd];
+    }
+
+    onUpdateData({ ...data, committees: updated });
+    updated.forEach((com) => {
+      syncCommitteeToPublicFirestore(db, com, weddingInfo);
+    });
+    alert(isRtl ? `تم إدراج ${freshDefaults.length} لجنة ميدانية بنجاح! ✓` : `Loaded ${freshDefaults.length} default committees! ✓`);
+  };
+
+  // استيراد اللجان دفعة واحدة من ملف إكسل أو CSV
+  const handleBulkExcelFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkExcelFileName(file.name);
+    setBulkExcelError('');
+    setBulkExcelCommittees([]);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const dataRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+        if (!dataRows || dataRows.length < 1) {
+          setBulkExcelError(isRtl ? 'الملف فارغ.' : 'File is empty.');
+          return;
+        }
+
+        const firstRow = dataRows[0].map(h => String(h || '').trim().toLowerCase());
+        const hasHeader = firstRow.some(h => 
+          h.includes('لجنة') || h.includes('اسم') || h.includes('name') || h.includes('committee')
+        );
+
+        let startRow = 0;
+        let nameIdx = 0;
+        let leaderIdx = -1;
+        let phoneIdx = -1;
+        let volunteersIdx = -1;
+
+        if (hasHeader && dataRows.length > 1) {
+          startRow = 1;
+          nameIdx = firstRow.findIndex(h => h.includes('لجنة') || h.includes('اسم') || h.includes('name') || h.includes('committee'));
+          if (nameIdx === -1) nameIdx = 0;
+          leaderIdx = firstRow.findIndex(h => h.includes('مشرف') || h.includes('مسؤول') || h.includes('رئيس') || h.includes('leader'));
+          phoneIdx = firstRow.findIndex(h => h.includes('هاتف') || h.includes('جوال') || h.includes('تلفون') || h.includes('phone') || h.includes('mobile'));
+          volunteersIdx = firstRow.findIndex(h => h.includes('متطوع') || h.includes('عدد') || h.includes('volunteers') || h.includes('count'));
+        }
+
+        const parsed = [];
+        for (let i = startRow; i < dataRows.length; i++) {
+          const row = dataRows[i];
+          if (!row || row.length === 0) continue;
+          const name = String(row[nameIdx] || '').trim();
+          if (!name) continue;
+
+          const leader = leaderIdx !== -1 ? String(row[leaderIdx] || '').trim() : '';
+          const phone = phoneIdx !== -1 ? String(row[phoneIdx] || '').trim() : '';
+          const volunteers = volunteersIdx !== -1 ? (Number(row[volunteersIdx]) || '') : '';
+
+          parsed.push({
+            id: `com-import-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`,
+            name,
+            nameEn: '',
+            leader,
+            phone,
+            volunteersCount: volunteers,
+            responsibilities: [],
+            tasks: [],
+            members: []
+          });
+        }
+
+        if (parsed.length === 0) {
+          setBulkExcelError(isRtl ? 'لم يتم العثور على أي أسماء لجان صالحة في الملف.' : 'No valid committee names found in file.');
+        } else {
+          setBulkExcelCommittees(parsed);
+        }
+      } catch (err) {
+        console.error('Error parsing committees excel file:', err);
+        setBulkExcelError(isRtl ? 'تعذر قراءة الملف. يرجى التأكد من صيغة الملف (.xlsx أو .csv).' : 'Failed to parse file.');
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleConfirmBulkImport = () => {
+    if (!bulkExcelCommittees || bulkExcelCommittees.length === 0) return;
+    let updated;
+    if (bulkExcelMode === 'replace') {
+      updated = bulkExcelCommittees;
+    } else {
+      updated = [...committees, ...bulkExcelCommittees];
+    }
+
+    onUpdateData({ ...data, committees: updated });
+    updated.forEach(c => syncCommitteeToPublicFirestore(db, c, weddingInfo));
+    setShowBulkImportCommitteesModal(false);
+    setBulkExcelCommittees([]);
+    setBulkExcelFileName('');
+    alert(isRtl ? `تم استيراد ${bulkExcelCommittees.length} لجنة بنجاح! ✓` : `Imported ${bulkExcelCommittees.length} committees! ✓`);
+  };
+
+  const handleDownloadBulkCommitteesSampleCsv = () => {
+    const csvContent = "\uFEFFاسم اللجنة,مشرف اللجنة,رقم الهاتف,عدد المتطوعين\nلجنة الصالة (النساء),,,15\nلجنة السامان والتغسيل,,,20\nلجنة العقد,,,10\nلجنة توزيع العشاء,,,25\nلجنة النظام,,,30\nلجنة الفرش وساحة الزواج,,,20\nلجنة الماء البارد,,,12\nلجنة المغاسيل,,,8\nلجنة العرسان,,,10\nلجنة الذبح واللحوم,,,15\nلجنة طبخ الوليمة,,,18\nلجنة المسرح وتجهيزه,,,10\nلجنة الاعلام,,,8\nلجنة الصحة والاسعاف,,,6\n";
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'نموذج_استيراد_اللجان_مراسيم.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   // --- Handlers: Committee Members & Tasks ---
@@ -1349,102 +1490,132 @@ export default function MassWeddingDashboard({
             <div className="space-y-6">
 
               {/* Breadcrumb Navigation & Back Button */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs">
+              <div className="flex items-center justify-between gap-3 bg-white px-4 py-3 rounded-2xl border border-gray-200/80 shadow-xs">
                 <button
                   type="button"
                   onClick={() => setSelectedCommitteeId(null)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 font-black text-xs transition border border-amber-200/60 w-fit"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 font-black text-xs transition border border-amber-200/60 shrink-0"
                 >
-                  <ArrowRight size={16} className="rtl:rotate-0 ltr:rotate-180" />
-                  <span>{isRtl ? '← العودة لكافة اللجان التنظيمية' : 'Back to All Committees'}</span>
+                  <ArrowRight size={15} className="rtl:rotate-0 ltr:rotate-180" />
+                  <span>{isRtl ? 'العودة لكافة اللجان التنظيمية' : 'Back to All Committees'}</span>
                 </button>
 
-                <div className="text-xs font-bold text-gray-500 flex items-center gap-2">
+                <div className="text-xs font-bold text-gray-500 flex items-center gap-2 truncate">
                   <span>{isRtl ? 'اللجان الميدانية' : 'Committees'}</span>
-                  <span>/</span>
-                  <span className="text-amber-800 font-black">{activeCommittee.name}</span>
+                  <span className="text-gray-300">/</span>
+                  <span className="text-amber-800 font-black truncate">{activeCommittee.name}</span>
                 </div>
               </div>
 
               {/* Committee Dedicated Hero Banner */}
-              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 text-white p-6 sm:p-7 shadow-lg">
+              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 text-white p-5 sm:p-7 shadow-lg">
                 <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
 
-                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                  <div className="space-y-2 max-w-2xl">
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20 text-blue-100">
-                      <HeartHandshake size={14} />
+                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                  {/* Left (in RTL right): Title, badges, and lead info */}
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-xs font-bold border border-white/20 text-blue-100">
+                      <HeartHandshake size={14} className="text-amber-300" />
                       <span>{isRtl ? 'الصفحة التفصيلية للجنة الميدانية' : 'Committee Detail Workspace'}</span>
                     </div>
 
-                    <h2 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
-                      <span>{activeCommittee.name}</span>
-                    </h2>
-                    {activeCommittee.nameEn && (
-                      <p className="text-xs text-blue-200 font-medium">{activeCommittee.nameEn}</p>
-                    )}
+                    <div className="flex flex-wrap items-baseline gap-2.5">
+                      <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                        {activeCommittee.name}
+                      </h2>
+                      {activeCommittee.nameEn && (
+                        <span className="text-xs text-blue-200 font-medium">({activeCommittee.nameEn})</span>
+                      )}
+                    </div>
 
-                    <div className="flex flex-wrap items-center gap-3 pt-2 text-xs">
-                      <div className="bg-white/15 px-3.5 py-1.5 rounded-xl border border-white/10 flex items-center gap-2">
+                    {/* Lead & Contact Details Strip */}
+                    <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+                      <div className="bg-white/15 px-3 py-1.5 rounded-xl border border-white/10 flex items-center gap-1.5">
                         <span className="text-blue-200">{isRtl ? 'المشرف المسؤول:' : 'Lead:'}</span>
-                        <strong className="text-white font-black">{activeCommittee.leader}</strong>
+                        <strong className="text-white font-black">{activeCommittee.leader || (isRtl ? 'لم يعيّن بعد' : 'Unassigned')}</strong>
                       </div>
 
                       {activeCommittee.phone && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <a
                             href={`tel:${activeCommittee.phone}`}
-                            className="bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-100 px-3 py-1.5 rounded-xl border border-emerald-400/30 font-bold flex items-center gap-1.5 transition"
+                            className="bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-100 px-2.5 py-1.5 rounded-xl border border-emerald-400/30 font-bold flex items-center gap-1 transition"
                           >
-                            <Phone size={13} />
+                            <Phone size={12} />
                             <span dir="ltr">{activeCommittee.phone}</span>
                           </a>
                           <a
                             href={`https://wa.me/${activeCommittee.phone.replace(/[^0-9]/g, '')}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition shadow-sm"
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1.5 rounded-xl font-bold flex items-center gap-1 transition shadow-sm"
                           >
-                            <Share2 size={13} />
+                            <Share2 size={12} />
                             <span>واتساب</span>
                           </a>
                         </div>
                       )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleEditCommittee(activeCommittee)}
+                        className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-blue-100 rounded-xl transition flex items-center gap-1 text-[11px] font-bold border border-white/10"
+                        title={isRtl ? 'تعديل بيانات اللجنة' : 'Edit Committee'}
+                      >
+                        <Edit2 size={12} />
+                        <span>{isRtl ? 'تعديل البيانات' : 'Edit'}</span>
+                      </button>
                     </div>
                   </div>
 
-                  {/* Actions Strip in Hero */}
-                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  {/* Right (in RTL left): Compact, well-organized action toolbar */}
+                  <div className="flex flex-wrap items-center justify-start lg:justify-end gap-1.5 shrink-0 max-w-md">
+                    {/* Primary Action: Add Member */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingMember(null);
+                        setShowAddMemberModal(true);
+                      }}
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-xl font-black text-xs transition shadow-md whitespace-nowrap"
+                    >
+                      <UserPlus size={14} />
+                      <span>{isRtl ? '➕ إضافة عضو' : 'Add Member'}</span>
+                    </button>
+
+                    {/* QR Code & Portal */}
                     <button
                       type="button"
                       onClick={() => handleOpenQrModal(activeCommittee)}
-                      className="flex items-center gap-2 px-3.5 py-2.5 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-xl font-black text-xs transition shadow-sm"
+                      className="flex items-center gap-1.5 px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/25 transition shadow-sm whitespace-nowrap"
                       title={isRtl ? 'توليد وعرض رمز QR لبوابة اللجنة' : 'Generate QR Code'}
                     >
-                      <QrIcon size={15} />
+                      <QrIcon size={14} />
                       <span>{isRtl ? '🏁 رمز QR والبوابة' : 'QR & Portal'}</span>
                     </button>
 
+                    {/* Mobile Preview */}
                     <button
                       type="button"
                       onClick={() => setPortalPreviewCommittee(activeCommittee)}
-                      className="flex items-center gap-2 px-3.5 py-2.5 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/25 transition shadow-sm"
+                      className="flex items-center gap-1.5 px-2.5 py-2 bg-white/15 hover:bg-white/25 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/20 transition shadow-sm whitespace-nowrap"
                       title={isRtl ? 'معاينة شكل البوابة في هاتف العضو' : 'Mobile Preview'}
                     >
-                      <Eye size={15} />
-                      <span>{isRtl ? '📱 معاينة الجوال' : 'Mobile View'}</span>
+                      <Eye size={14} />
+                      <span>{isRtl ? '📱 معاينة' : 'Mobile'}</span>
                     </button>
 
+                    {/* Copy Link */}
                     <button
                       type="button"
                       onClick={() => handleCopyCommitteePortal(activeCommittee)}
-                      className="flex items-center gap-2 px-3.5 py-2.5 bg-white/15 hover:bg-white/25 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/20 transition shadow-sm"
+                      className="flex items-center gap-1.5 px-2.5 py-2 bg-white/15 hover:bg-white/25 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/20 transition shadow-sm whitespace-nowrap"
                       title={isRtl ? 'نسخ رابط البوابة الميدانية المباشر' : 'Copy Portal Link'}
                     >
                       {copiedPortalFor === activeCommittee.id ? (
-                        <Check size={15} className="text-emerald-300" />
+                        <Check size={14} className="text-emerald-300" />
                       ) : (
-                        <Copy size={15} />
+                        <Copy size={14} />
                       )}
                       <span>
                         {copiedPortalFor === activeCommittee.id
@@ -1453,6 +1624,7 @@ export default function MassWeddingDashboard({
                       </span>
                     </button>
 
+                    {/* WhatsApp Lead Quick Share (if phone exists) */}
                     {activeCommittee.phone && (() => {
                       const portalUrl = generateCommitteePortalUrl(activeCommittee, weddingInfo);
                       const cleanP = activeCommittee.phone.replace(/[^0-9]/g, '');
@@ -1464,24 +1636,26 @@ export default function MassWeddingDashboard({
                           href={`https://wa.me/${cleanP}?text=${msg}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-2 px-3.5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-xs transition shadow-sm"
+                          className="flex items-center gap-1.5 px-2.5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-xs transition shadow-sm whitespace-nowrap"
                           title={isRtl ? 'إرسال الرابط للمشرف مباشرة عبر واتساب' : 'Send via WhatsApp'}
                         >
-                          <Share2 size={15} />
-                          <span>{isRtl ? '💬 إرسال للمشرف' : 'Send to Lead'}</span>
+                          <Share2 size={14} />
+                          <span>{isRtl ? '💬 للمشرف' : 'To Lead'}</span>
                         </a>
                       );
                     })()}
 
+                    {/* Export PDF */}
                     <button
                       type="button"
                       onClick={() => setShowPdfReportModal(true)}
-                      className="flex items-center gap-2 px-3.5 py-2.5 bg-white/15 hover:bg-white/25 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/20 transition shadow-sm"
+                      className="flex items-center gap-1.5 px-2.5 py-2 bg-white/15 hover:bg-white/25 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/20 transition shadow-sm whitespace-nowrap"
                     >
-                      <Printer size={15} />
-                      <span>{isRtl ? '📄 تقرير PDF' : 'Export PDF'}</span>
+                      <Printer size={14} />
+                      <span>{isRtl ? '📄 تقرير PDF' : 'PDF'}</span>
                     </button>
 
+                    {/* Import Members Excel */}
                     <button
                       type="button"
                       onClick={() => {
@@ -1490,37 +1664,16 @@ export default function MassWeddingDashboard({
                         setExcelFileName('');
                         setShowImportExcelModal(true);
                       }}
-                      className="flex items-center gap-2 px-3.5 py-2.5 bg-emerald-500/80 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs transition border border-emerald-400/40 shadow-sm"
+                      className="flex items-center gap-1.5 px-2.5 py-2 bg-emerald-600/90 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs transition border border-emerald-400/40 shadow-sm whitespace-nowrap"
                     >
-                      <FileSpreadsheet size={15} />
+                      <FileSpreadsheet size={14} />
                       <span>{isRtl ? '📊 إكسل' : 'Excel'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingMember(null);
-                        setShowAddMemberModal(true);
-                      }}
-                      className="flex items-center gap-2 px-3.5 py-2.5 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-xl font-black text-xs transition shadow-sm"
-                    >
-                      <UserPlus size={15} />
-                      <span>{isRtl ? '➕ عضو' : 'Member'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleEditCommittee(activeCommittee)}
-                      className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition"
-                      title={isRtl ? 'تعديل بيانات اللجنة' : 'Edit Committee'}
-                    >
-                      <Edit2 size={16} />
                     </button>
                   </div>
                 </div>
 
                 {/* KPI Strip */}
-                <div className="mt-6 pt-4 border-t border-white/20 flex flex-wrap items-center gap-2.5 text-xs font-bold text-blue-100">
+                <div className="mt-5 pt-3.5 border-t border-white/15 flex flex-wrap items-center gap-2 text-xs font-bold text-blue-100">
                   <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
                     👥 <span>{isRtl ? 'الأعضاء المسجلين بالاسم:' : 'Registered Members:'}</span>
                     <strong className="text-amber-300 font-black">{comMembers.length}</strong>
@@ -1858,27 +2011,30 @@ export default function MassWeddingDashboard({
               <div className="space-y-4">
 
             {/* Committees Specialized Hero Banner */}
-            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 text-white p-6 sm:p-7 shadow-lg">
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 text-white p-5 sm:p-7 shadow-lg">
               <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
 
-              <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                <div className="space-y-1.5 max-w-2xl">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20 text-blue-100">
-                    <HeartHandshake size={14} />
+              <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                {/* Text section: spacious, full natural width */}
+                <div className="flex-1 min-w-0 space-y-2">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-xs font-bold border border-white/20 text-blue-100">
+                    <HeartHandshake size={14} className="text-amber-300" />
                     <span>{isRtl ? 'اللجان التنظيمية والفرق الميدانية' : 'Field Committees & Teams'}</span>
                   </div>
-                  <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+                  
+                  <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-white leading-tight">
                     <span>{isRtl ? 'إدارة اللجان والفرق الميدانية والمتطوعين' : 'Committees, Leads & Volunteers'}</span>
                   </h3>
-                  <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed">
+                  
+                  <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed max-w-3xl">
                     {isRtl
                       ? `توزيع المهام والمسؤولين والفرق الميدانية (${committees.length} لجان، و ${totalVolunteers} متطوع ميداني) لتنظيم استقبال الضيوف، إعداد الوليمة والشاهي، وتأمين ساحات الحفل. انقر على أي لجنة للدخول إلى صفحتها التفصيلية لإدارة الأعضاء وتصدير التقارير.`
                       : `Organize field teams (${committees.length} committees, ${totalVolunteers} volunteers) to supervise guest reception, feast logistics, and venue order. Click any committee to manage details.`}
                   </p>
                 </div>
 
-                {/* Action Button */}
-                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                {/* Action Buttons: Compact, sleek, to the side */}
+                <div className="flex flex-wrap sm:flex-nowrap lg:flex-wrap items-center gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => {
@@ -1886,10 +2042,35 @@ export default function MassWeddingDashboard({
                       setFormDynamicTasks(['', '']);
                       setShowAddCommitteeModal(true);
                     }}
-                    className="flex items-center gap-2 px-5 py-3 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-2xl font-black text-xs sm:text-sm shadow-md transition"
+                    className="flex items-center gap-1.5 px-3.5 py-2 sm:px-4 sm:py-2.5 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-xl font-black text-xs sm:text-sm shadow-md transition whitespace-nowrap"
                   >
-                    <Plus size={18} />
-                    <span>{isRtl ? '➕ إضافة لجنة تنظيمية' : 'Add Committee'}</span>
+                    <Plus size={16} />
+                    <span>{isRtl ? '➕ إضافة لجنة' : 'Add Committee'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBulkExcelError('');
+                      setBulkExcelCommittees([]);
+                      setBulkExcelFileName('');
+                      setBulkExcelMode('append');
+                      setShowBulkImportCommitteesModal(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow-md transition border border-emerald-400/30 whitespace-nowrap"
+                  >
+                    <FileSpreadsheet size={15} />
+                    <span>{isRtl ? '📊 استيراد إكسل' : 'Import Excel'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleLoadDefaultCommittees(false)}
+                    className="flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 bg-white/15 hover:bg-white/25 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/20 transition shadow-sm whitespace-nowrap"
+                    title={isRtl ? 'إدراج اللجان الـ 14 الافتراضية' : 'Load Default 14 Committees'}
+                  >
+                    <Sparkles size={15} className="text-amber-300" />
+                    <span>{isRtl ? '⚡ اللجان الافتراضية' : 'Defaults (14)'}</span>
                   </button>
                 </div>
               </div>
@@ -1912,32 +2093,59 @@ export default function MassWeddingDashboard({
             </div>
 
             {committees.length === 0 ? (
-              <div className="bg-white p-12 rounded-3xl border border-dashed border-gray-300 text-center text-gray-500 space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+              <div className="bg-white p-10 sm:p-12 rounded-3xl border border-dashed border-gray-300 text-center text-gray-500 space-y-5">
+                <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto shadow-xs">
                   <HeartHandshake size={32} />
                 </div>
-                <div className="space-y-1">
-                  <h4 className="font-bold text-gray-800 text-base">
+                <div className="space-y-1.5">
+                  <h4 className="font-black text-gray-800 text-lg">
                     {isRtl ? 'لا توجد لجان ميدانية مسجلة حتى الآن' : 'No committees registered yet'}
                   </h4>
-                  <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                  <p className="text-xs text-gray-500 max-w-md mx-auto leading-relaxed">
                     {isRtl
-                      ? 'أنشئ فرق العمل (كاللجنة الإعلامية، لجنة الضيافة والوليمة، ولجنة الاستقبال) لتوزيع المتطوعين والمهام.'
-                      : 'Create working teams to assign responsibilities, leads, and volunteers.'}
+                      ? 'يمكنك بنقرة واحدة إدراج اللجان الميدانية الافتراضية الـ 14 (لجنة الصالة، العقد، السامان، توزيع العشاء، النظام، الفرش، الذبح، والمزيد) أو استيرادها مباشرة من ملف إكسل.'
+                      : 'Load the 14 default operational committees with one click, import them from an Excel sheet, or add them manually.'}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingCommittee(null);
-                    setFormDynamicTasks(['', '']);
-                    setShowAddCommitteeModal(true);
-                  }}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs sm:text-sm shadow-md transition"
-                >
-                  <Plus size={16} />
-                  <span>{isRtl ? 'إضافة أول لجنة تنظيمية' : 'Add First Committee'}</span>
-                </button>
+
+                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleLoadDefaultCommittees(true)}
+                    className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs sm:text-sm shadow-md transition"
+                  >
+                    <Sparkles size={18} />
+                    <span>{isRtl ? '⚡ إدراج اللجان الافتراضية الـ 14 الآن' : 'Load 14 Default Committees'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBulkExcelError('');
+                      setBulkExcelCommittees([]);
+                      setBulkExcelFileName('');
+                      setBulkExcelMode('append');
+                      setShowBulkImportCommitteesModal(true);
+                    }}
+                    className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm shadow-md transition"
+                  >
+                    <FileSpreadsheet size={18} />
+                    <span>{isRtl ? '📊 استيراد اللجان من إكسل / CSV' : 'Import from Excel / CSV'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCommittee(null);
+                      setFormDynamicTasks(['', '']);
+                      setShowAddCommitteeModal(true);
+                    }}
+                    className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs sm:text-sm transition border border-gray-200"
+                  >
+                    <Plus size={16} />
+                    <span>{isRtl ? '➕ إضافة لجنة يدوياً' : 'Add Committee Manually'}</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3266,6 +3474,163 @@ export default function MassWeddingDashboard({
           </div>
         );
       })()}
+
+      {/* Modal: Bulk Import Committees from Excel / CSV */}
+      {showBulkImportCommitteesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-emerald-100 space-y-4 my-8">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                  <FileSpreadsheet size={22} className="text-emerald-600" />
+                  <span>{isRtl ? 'استيراد اللجان الميدانية من ملف إكسل أو CSV' : 'Import Committees from Excel / CSV'}</span>
+                </h3>
+                <p className="text-xs text-gray-500 font-bold mt-0.5">
+                  {isRtl ? 'استيراد قائمة اللجان دفعة واحدة وإنشاء بطاقاتها في العرس الجماعي' : 'Bulk import committees list and create cards'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBulkImportCommitteesModal(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-xl transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Mode Selector: Append vs Replace */}
+            <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200 space-y-2">
+              <label className="text-xs font-black text-gray-700 block">
+                {isRtl ? 'طريقة الاستيراد والتعامل مع اللجان الحالية:' : 'Import Mode:'}
+              </label>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <label className={`p-2.5 rounded-xl border flex items-center gap-2 cursor-pointer transition ${
+                  bulkExcelMode === 'append' ? 'bg-emerald-50 border-emerald-300 font-black text-emerald-900' : 'bg-white border-gray-200 text-gray-600'
+                }`}>
+                  <input
+                    type="radio"
+                    name="bulkExcelMode"
+                    value="append"
+                    checked={bulkExcelMode === 'append'}
+                    onChange={() => setBulkExcelMode('append')}
+                    className="text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span>{isRtl ? `إلحاق وإضافة (+${committees.length})` : 'Append (Keep existing)'}</span>
+                </label>
+
+                <label className={`p-2.5 rounded-xl border flex items-center gap-2 cursor-pointer transition ${
+                  bulkExcelMode === 'replace' ? 'bg-amber-50 border-amber-300 font-black text-amber-900' : 'bg-white border-gray-200 text-gray-600'
+                }`}>
+                  <input
+                    type="radio"
+                    name="bulkExcelMode"
+                    value="replace"
+                    checked={bulkExcelMode === 'replace'}
+                    onChange={() => setBulkExcelMode('replace')}
+                    className="text-amber-600 focus:ring-amber-500"
+                  />
+                  <span>{isRtl ? 'استبدال الكل (Replace)' : 'Replace All'}</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Upload Drop Zone */}
+            <div className="border-2 border-dashed border-emerald-300 rounded-2xl p-6 bg-emerald-50/40 text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+                <UploadCloud size={24} />
+              </div>
+              <div>
+                <p className="text-xs font-black text-gray-900 mb-1">
+                  {isRtl ? 'اختر ملف إكسل (.xlsx, .xls) أو ملف (.csv)' : 'Select Excel (.xlsx, .xls) or .csv file'}
+                </p>
+                <p className="text-[11px] text-gray-500">
+                  {isRtl ? 'يتعرف النظام تلقائياً على أعمدة: اسم اللجنة، المشرف، الهاتف، وعدد المتطوعين' : 'Auto-detects: Committee Name, Leader, Phone, and Volunteers'}
+                </p>
+              </div>
+
+              <label className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs cursor-pointer shadow-sm transition">
+                <FileSpreadsheet size={15} />
+                <span>{bulkExcelFileName ? bulkExcelFileName : (isRtl ? 'تحديد الملف من جهازك' : 'Choose File')}</span>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleBulkExcelFileUpload}
+                  className="hidden"
+                />
+              </label>
+
+              {bulkExcelFileName && (
+                <p className="text-xs text-emerald-700 font-bold">
+                  ✓ {isRtl ? 'تم تحميل الملف:' : 'Selected:'} {bulkExcelFileName}
+                </p>
+              )}
+            </div>
+
+            {/* Sample Template Download */}
+            <div className="flex items-center justify-between text-xs bg-gray-50 p-3 rounded-xl border border-gray-200">
+              <span className="text-gray-600 font-bold">{isRtl ? 'بحاجة لنموذج جاهز للتعبئة؟' : 'Need a template file?'}</span>
+              <button
+                type="button"
+                onClick={handleDownloadBulkCommitteesSampleCsv}
+                className="text-emerald-700 hover:text-emerald-800 font-black flex items-center gap-1 hover:underline"
+              >
+                <Download size={13} />
+                <span>{isRtl ? 'تحميل نموذج اللجان (CSV)' : 'Download Template'}</span>
+              </button>
+            </div>
+
+            {bulkExcelError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2">
+                <AlertCircle size={15} className="shrink-0" />
+                <span>{bulkExcelError}</span>
+              </div>
+            )}
+
+            {/* Preview Table */}
+            {bulkExcelCommittees.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs font-black text-gray-900">
+                  <span>{isRtl ? 'معاينة اللجان المستخرجة:' : 'Extracted Committees Preview:'}</span>
+                  <span className="text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-lg">
+                    {isRtl ? `تم العثور على (${bulkExcelCommittees.length}) لجنة` : `${bulkExcelCommittees.length} committees found`}
+                  </span>
+                </div>
+
+                <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-xl divide-y divide-gray-100 text-xs">
+                  {bulkExcelCommittees.map((com, idx) => (
+                    <div key={idx} className="p-2.5 flex items-center justify-between gap-2 bg-white">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-gray-400 font-mono text-[10px] w-5">{idx + 1}.</span>
+                        <strong className="text-gray-900 truncate">{com.name}</strong>
+                        {com.leader && <span className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{com.leader}</span>}
+                      </div>
+                      {com.phone && <span className="font-mono text-gray-500 text-[11px]" dir="ltr">{com.phone}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setShowBulkImportCommitteesModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 transition"
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                disabled={bulkExcelCommittees.length === 0}
+                onClick={handleConfirmBulkImport}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-bold transition shadow-sm"
+              >
+                {isRtl ? `تأكيد واستيراد (${bulkExcelCommittees.length}) لجنة ✓` : `Import (${bulkExcelCommittees.length}) Committees ✓`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal: PDF Report & Printable Document */}
       {showPdfReportModal && selectedCommitteeId && (() => {

@@ -95,7 +95,165 @@ export const DEFAULT_CALCULATOR_RATES = {
 // مواد ومؤن افتراضية إضافية - فارغة تماماً لتبدأ من الصفر حسب إضافة المنظم
 export const DEFAULT_CUSTOM_LOGISTICS_ITEMS = [];
 
-// قالب العرس الجماعي النظيف الجديد (فارغ تماماً لبدء عرس جديد من الصفر)
+// اللجان الميدانية الافتراضية للعرس الجماعي (14 لجنة تنظيمية ميدانية)
+export const DEFAULT_MASS_WEDDING_COMMITTEES = [
+  {
+    id: "com-hall-women",
+    name: "لجنة الصالة (النساء)",
+    nameEn: "Women's Hall Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-saman-washing",
+    name: "لجنة السامان والتغسيل",
+    nameEn: "Supplies & Dishwashing Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-aqd",
+    name: "لجنة العقد",
+    nameEn: "Marriage Contract (Aqd) Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-dinner-distribution",
+    name: "لجنة توزيع العشاء",
+    nameEn: "Dinner Distribution Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-order-security",
+    name: "لجنة النظام",
+    nameEn: "Order & Protocol Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-carpets-venue",
+    name: "لجنة الفرش وساحة الزواج",
+    nameEn: "Carpets & Venue Setup Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-cold-water",
+    name: "لجنة الماء البارد",
+    nameEn: "Cold Water & Hydration Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-washbasins",
+    name: "لجنة المغاسيل",
+    nameEn: "Washing Stations Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-couples-care",
+    name: "لجنة العرسان",
+    nameEn: "Couples Care Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-slaughter-meat",
+    name: "لجنة الذبح واللحوم",
+    nameEn: "Slaughter & Meat Preparation Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-feast-cooking",
+    name: "لجنة طبخ الوليمة",
+    nameEn: "Feast Cooking Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-stage-av",
+    name: "لجنة المسرح وتجهيزه",
+    nameEn: "Stage & AV Setup Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-media",
+    name: "لجنة الاعلام",
+    nameEn: "Media & Coverage Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-health-firstaid",
+    name: "لجنة الصحة والاسعاف",
+    nameEn: "Health & First Aid Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  }
+];
+
+// قالب العرس الجماعي النظيف الجديد
 export const DEFAULT_MASS_WEDDING_DATA = {
   info: {
     title: "",
@@ -116,7 +274,7 @@ export const DEFAULT_MASS_WEDDING_DATA = {
     isConfigured: false
   },
   couples: [],
-  committees: [],
+  committees: DEFAULT_MASS_WEDDING_COMMITTEES.map(c => ({ ...c })),
   sponsorships: [],
   expenses: [],
   schedule: [],
