@@ -19,15 +19,11 @@ export default class ErrorBoundary extends React.Component {
     try {
       if ('serviceWorker' in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations();
-        for (const reg of registrations) {
-          await reg.unregister();
-        }
+        await Promise.all(registrations.map(reg => reg.unregister()));
       }
       if ('caches' in window) {
         const cacheKeys = await caches.keys();
-        for (const key of cacheKeys) {
-          await caches.delete(key);
-        }
+        await Promise.all(cacheKeys.map(key => caches.delete(key)));
       }
       localStorage.clear();
       sessionStorage.clear();
