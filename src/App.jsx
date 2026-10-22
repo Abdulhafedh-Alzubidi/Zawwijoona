@@ -10,7 +10,8 @@ import {
   Menu, X, Sparkles, Loader2, Copy, HeartHandshake, Image as ImageIcon, FileText,
   MessageCircle, Send, Upload, FileSpreadsheet,
   Phone, ExternalLink, Camera, Music, Flower2, UtensilsCrossed, Utensils, Coins, Calendar, Users2, Search,
-  Building2, Eye, BookmarkCheck, BookmarkPlus, Check, Star, AlertCircle, Edit2
+  Building2, Eye, BookmarkCheck, BookmarkPlus, Check, Star, AlertCircle, Edit2,
+  Scissors, Mail, Car, Bed, Tent
 } from 'lucide-react';
 import { SERVICE_CATEGORIES, SERVICE_TEMPLATES, createWhatsAppInquiryLink } from './data/servicesData';
 import WeddingModeSelector from './components/WeddingModeSelector';
@@ -19,285 +20,20 @@ import MassWeddingSetupModal from './components/MassWeddingSetupModal';
 import MassWeddingSetupScreen from './components/MassWeddingSetupScreen';
 import { DEFAULT_MASS_WEDDING_DATA } from './data/massWeddingTemplates';
 import CommitteePortalView from './components/CommitteePortalView';
-import { decodeCommitteePortalData } from './utils/portalHelpers';
+import {
+  decodeCommitteePortalData,
+  fetchCommitteeFromPublicFirestore,
+  syncCommitteeToPublicFirestore,
+} from './utils/portalHelpers';
 
-// --- Dictionary for Bilingual Support ---
-const dict = {
-  ar: {
-    appName: "مراسيم",
-    dashboard: "الرئيسية",
-    planning: "خطة الزفاف",
-    services: "الخدمات والحجوزات",
-    guests: "الضيوف",
-    budget: "الميزانية",
-    team: "فريق التنظيم",
-    switchLang: "English",
-    // ... login/signup ...
-    loginTitle: "تسجيل الدخول",
-    signupTitle: "إنشاء حساب",
-    email: "البريد الإلكتروني",
-    password: "كلمة المرور",
-    loginBtn: "دخول",
-    signupBtn: "تسجيل",
-    noAccount: "ليس لديك حساب؟",
-    haveAccount: "لديك حساب بالفعل؟",
+import { dict } from "./locales/dictionary";
 
-    // Registration
-    welcomeSetup: "إعداد ملف الزفاف",
-    groomName: "اسم العريس",
-    brideName: "اسم العروس",
-    weddingDate: "تاريخ الزفاف",
-    initialBudget: "الميزانية المبدئية",
-    startPlanning: "ابدأ التخطيط",
-    // Dashboard
-    welcome: "مرحباً بك في تخطيط",
-    daysLeft: "يوم متبقي على الزفاف",
-    completedTasks: "المهام المنجزة",
-    totalBudget: "الميزانية المتاحة",
-    // Planning
-    events: "الفعاليات والمراسم",
-    contract: "عقد القران",
-    henna: "جلسة الحناء",
-    magyal: "الحراوة (يوم الزفاف)",
-    banquet: "الصبحة / الوليمة",
-    addEvent: "إضافة فعالية",
-    notes: "ملاحظات الفعالية...",
-    eventDate: "تاريخ الفعالية",
-    eventLocation: "موقع الفعالية",
-    eventTitle: "اسم الفعالية",
-    // Services
-    bookService: "حجز خدمة",
-    venues: "القاعات والمخادر",
-    photo: "التصوير",
-    band: "فرق الشرح والغيّة",
-    morning: "صباحية",
-    evening: "مسائية",
-    bookNow: "احجز الآن",
-    available: "متاح",
-    servicesDirectory: "دليل الخدمات والموردين",
-    myBookings: "حجوزاتي المعتمدة",
-    searchServices: "ابحث عن خدمة، مورد، أو مدينة...",
-    allCategories: "جميع الفئات",
-    priceEstimate: "التقدير التقريبي",
-    contactWhatsApp: "مراسلة عبر واتساب",
-    callPhone: "اتصال هاتفي",
-    addToBookings: "إضافة لحجوزاتي",
-    inBookings: "مضاف للحجوزات ✓",
-    removeFromBookings: "إزالة من الحجوزات",
-    viewPhotos: "معاينة الصور",
-    features: "المميزات والخدمات",
-    cityLocation: "المدينة / الموقع",
-    statusConfirmed: "مؤكد",
-    statusNegotiating: "قيد التفاوض",
-    statusInquiry: "استفسار مبدئي",
-    bookingStatus: "حالة الحجز",
-    agreedCost: "المبلغ المتفق عليه (ر.ي)",
-    addCustomService: "إضافة مزود خدمة مخصص",
-    serviceProviderName: "اسم مزود الخدمة",
-    serviceCategory: "فئة الخدمة",
-    phoneNumber: "رقم الهاتف / الواتساب",
-    noServicesFound: "لم يتم العثور على خدمات مطابقة للبحث",
-    noBookingsYet: "لم تقم بإضافة أي خدمات إلى قائمة حجوزاتك بعد",
-    startBrowsing: "استعرض دليل الخدمات وأضف ما يناسبك",
-    venueTemplatesCount: "مزود خدمة جاهز",
-    myBookingsCount: "خدمة محجوزة",
-    // Guests
-    guestList: "قائمة الضيوف",
-    groomSide: "أهل العريس",
-    brideSide: "أهل العروس",
-    addGuest: "إضافة ضيف",
-    guestName: "اسم ممثل العائلة",
-    accompanying: "المرافقين",
-    designInvite: "دعوة",
-    importCsv: "استيراد من CSV",
-    actions: "إجراءات",
-
-    // Budget
-    finances: "المالية والمصروفات",
-    incomes: "الموارد المالية",
-    expenses: "المصروفات",
-    totalExpenses: "إجمالي المصروفات",
-    remainingBudget: "المتبقي",
-    addIncome: "إضافة مورد مالي",
-    addExpense: "إضافة مصروف",
-    itemName: "البند / المصدر",
-    cost: "المبلغ",
-    type: "النوع",
-    currency: "ريال يمني",
-    incomeSource: "مصدر المبلغ",
-    incomeType: "نوع المبلغ (مثال: هدية، سلف، شخصي)",
-    // Team
-    volunteerTeam: "فريق الخدمات التطوعي",
-    addMember: "إضافة فرد",
-    addTeam: "إضافة فريق تنظيم",
-    teamName: "اسم الفريق",
-    teamLeader: "المسؤول (القائد)",
-    teamTasks: "المهام الرئيسية",
-    memberName: "الاسم",
-    role: "المجموعة",
-    task: "المهمة",
-    // AI Features
-    aiAssistant: "✨ المساعد الحضرمي الذكي",
-    generateInvite: "✨ إنشاء رسالة دعوة",
-    invitePrompt: "جاري صياغة دعوة حضرمية أصيلة...",
-    copyText: "نسخ النص",
-    copied: "تم النسخ!",
-    budgetTips: "✨ نصائح التوزيع (حضرمي)",
-    gettingTips: "جاري تحليل الميزانية...",
-    aiError: "حدث خطأ في الاتصال. يرجى المحاولة لاحقاً.",
-    // Chat
-    chatWithAI: "استشر المساعد الذكي",
-    typeMessage: "اكتب استفسارك هنا...",
-    // Form buttons
-    save: "حفظ",
-    cancel: "إلغاء",
-    massWedding: "عرس جماعي",
-    individualWedding: "زواج فردي",
-    switchMode: "تبديل الوضع",
-  },
-  en: {
-    appName: "Maraseem",
-    dashboard: "Dashboard",
-    planning: "Planning",
-    services: "Services",
-    guests: "Guests",
-    budget: "Budget",
-    team: "Organizers",
-    switchLang: "العربية",
-    // ... login/signup ...
-    loginTitle: "Sign In",
-    signupTitle: "Sign Up",
-    email: "Email Address",
-    password: "Password",
-    loginBtn: "Sign In",
-    signupBtn: "Sign Up",
-    noAccount: "Don't have an account?",
-    haveAccount: "Already have an account?",
-    // Registration
-    welcomeSetup: "Wedding Setup",
-    groomName: "Groom's Name",
-    brideName: "Bride's Name",
-    weddingDate: "Wedding Date",
-    initialBudget: "Initial Budget",
-    startPlanning: "Start Planning",
-    // Dashboard
-    welcome: "Welcome to the planning of",
-    daysLeft: "Days left",
-    completedTasks: "Completed Tasks",
-    totalBudget: "Available Budget",
-    // Planning
-    events: "Events & Ceremonies",
-    contract: "Marriage Contract",
-    henna: "Henna Day",
-    magyal: "Hraawa (Wedding Day)",
-    banquet: "Subha / Banquet",
-    addEvent: "Add Event",
-    notes: "Event notes...",
-    eventDate: "Event Date",
-    eventLocation: "Location",
-    eventTitle: "Event Title",
-    // Services
-    bookService: "Book Service",
-    venues: "Venues",
-    photo: "Photography",
-    band: "Traditional Bands",
-    morning: "Morning",
-    evening: "Evening",
-    bookNow: "Book Now",
-    available: "Available",
-    servicesDirectory: "Vendors & Services Directory",
-    myBookings: "My Confirmed Bookings",
-    searchServices: "Search service, vendor, or city...",
-    allCategories: "All Categories",
-    priceEstimate: "Price Estimate",
-    contactWhatsApp: "WhatsApp Chat",
-    callPhone: "Call Vendor",
-    addToBookings: "Add to My Bookings",
-    inBookings: "In Bookings ✓",
-    removeFromBookings: "Remove Booking",
-    viewPhotos: "View Photos",
-    features: "Features & Amenities",
-    cityLocation: "City / Location",
-    statusConfirmed: "Confirmed",
-    statusNegotiating: "Negotiating",
-    statusInquiry: "Inquiry",
-    bookingStatus: "Booking Status",
-    agreedCost: "Agreed Amount (YER)",
-    addCustomService: "Add Custom Vendor",
-    serviceProviderName: "Service Provider Name",
-    serviceCategory: "Service Category",
-    phoneNumber: "Phone / WhatsApp Number",
-    noServicesFound: "No services match your criteria",
-    noBookingsYet: "No booked services recorded yet",
-    startBrowsing: "Explore directory and add services to your wedding",
-    venueTemplatesCount: "Ready Vendors",
-    myBookingsCount: "Booked Services",
-    // Guests
-    guestList: "Guest List",
-    groomSide: "Groom Side",
-    brideSide: "Bride Side",
-    addGuest: "Add Guest",
-    guestName: "Family Rep Name",
-    accompanying: "Accompanying",
-    designInvite: "Invite",
-    importCsv: "Import CSV",
-    actions: "Actions",
-    // Budget
-    finances: "Finances",
-    incomes: "Incomes / Funds",
-    expenses: "Expenses",
-    totalExpenses: "Total Expenses",
-    remainingBudget: "Remaining",
-    addIncome: "Add Income",
-    addExpense: "Add Expense",
-    itemName: "Item / Source",
-    cost: "Amount",
-    type: "Type",
-    currency: "YER",
-    incomeSource: "Income Source",
-    incomeType: "Type (Gift, Loan, Personal)",
-    // Team
-    volunteerTeam: "Volunteer Support Team",
-    addMember: "Add Member",
-    addTeam: "Add Team",
-    teamName: "Team Name",
-    teamLeader: "Leader",
-    teamTasks: "Tasks",
-    memberName: "Name",
-    role: "Group",
-    task: "Task",
-    // AI Features
-    aiAssistant: "✨ Smart Hadhrami Assistant",
-    generateInvite: "✨ Generate Invitation",
-    invitePrompt: "Crafting a traditional invitation...",
-    copyText: "Copy",
-    copied: "Copied!",
-    budgetTips: "✨ Allocation Tips",
-    gettingTips: "Analyzing...",
-    aiError: "Connection error. Please try again.",
-    // Chat
-    chatWithAI: "Consult Smart Assistant",
-    typeMessage: "Type your message...",
-    // Form buttons
-    save: "Save",
-    cancel: "Cancel",
-    massWedding: "Mass Wedding",
-    individualWedding: "Individual Wedding",
-    switchMode: "Switch Mode",
-  }
-};
-
-// --- Gemini API Helper (Replace with your actual key) ---
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ''; // تأكد من إضافة مفتاح API في ملف .env
+// --- Gemini API Helper (Uses secure backend) ---
 const generateWithGemini = async (prompt) => {
-  if (!apiKey) {
-    console.warn("Gemini API key is missing. Simulating response.");
-    return new Promise(resolve => setTimeout(() => resolve("Simulated AI response. Please add your API key to src/App.jsx."), 1500));
-  }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-  const payload = { contents: [{ parts: [{ text: prompt }] }] };
+  const url = '/api/gemini';
+  const payload = { prompt };
 
-  let retries = 5;
+  let retries = 3;
   let delay = 1000;
   while (retries > 0) {
     try {
@@ -306,18 +42,35 @@ const generateWithGemini = async (prompt) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const data = await res.json();
-      if (data.candidates && data.candidates[0]) {
-        return data.candidates[0].content.parts[0].text;
+
+      // Handle the case where the serverless function isn't running (e.g. standard local dev server)
+      if (!res.ok && res.status === 404) {
+        console.warn("Backend API endpoint not found. Simulating response.");
+        return new Promise(resolve => setTimeout(() => resolve("Simulated AI response (Local Dev). Setup backend to use Gemini."), 1000));
       }
-      throw new Error("Invalid response");
+
+      const data = await res.json();
+
+      if (data.simulated) {
+          console.warn(data.text);
+          return new Promise(resolve => setTimeout(() => resolve(data.text), 1000));
+      }
+
+      if (data.text) {
+        return data.text;
+      }
+      throw new Error(data.error || "Invalid response");
     } catch (err) {
       retries--;
-      if (retries === 0) return null;
+      if (retries === 0) {
+          console.error("Gemini API call failed:", err);
+          return null;
+      }
       await new Promise(r => setTimeout(r, delay));
       delay *= 2;
     }
   }
+  return null;
 };
 
 export default function App() {
@@ -362,7 +115,7 @@ export default function App() {
       sessionStorage.clear();
 
     } catch (error) {
-      console.error("Error signing out:", error);
+      // Error signing out intentionally suppressed
     }
   };
 
@@ -443,6 +196,10 @@ export default function App() {
   const [activePhotoGallery, setActivePhotoGallery] = useState(null);
   const [showAddCustomServiceModal, setShowAddCustomServiceModal] = useState(false);
 
+  // --- Public Committee Portal State (الوصول المباشر بدون حساب) ---
+  const [publicPortalCommittee, setPublicPortalCommittee] = useState(null);
+  const [isPublicPortalLoading, setIsPublicPortalLoading] = useState(false);
+
   // --- دوال التخزين المحلي الآمن لضمان عدم اختفاء البيانات ---
   const getCacheKey = (uid) => `zawwijoona_wedding_cache_${uid}`;
 
@@ -467,6 +224,59 @@ export default function App() {
     }
   };
 
+  // --- مراقب جلب بيانات اللجنة العامة سحابياً لتمكين الفتح المباشر بدون حساب ---
+  useEffect(() => {
+    const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const req = params && (params.get('portal') === 'committee' || !!params.get('committeeId'));
+    const comId = params ? params.get('committeeId') : null;
+    const cdata = params ? params.get('cdata') : null;
+
+    if (!req || !comId) return;
+
+    // 1. فك التشفير الذاتي إن وُجد
+    if (cdata) {
+      const decoded = decodeCommitteePortalData(cdata);
+      if (decoded) {
+        setPublicPortalCommittee(decoded);
+        return;
+      }
+    }
+
+    // 2. التحقق من التخزين المحلي إن وُجد
+    try {
+      const directCached = localStorage.getItem(`maraseem_com_${comId}`);
+      if (directCached) {
+        setPublicPortalCommittee(JSON.parse(directCached));
+        return;
+      }
+    } catch (e) { }
+
+    // 3. الجلب السحابي المباشر من مسار اللجان العامة
+    let isMounted = true;
+    setIsPublicPortalLoading(true);
+
+    fetchCommitteeFromPublicFirestore(db, comId)
+      .then((data) => {
+        if (isMounted) {
+          if (data) {
+            setPublicPortalCommittee(data);
+            try {
+              localStorage.setItem(`maraseem_com_${comId}`, JSON.stringify(data));
+            } catch (e) { }
+          }
+          setIsPublicPortalLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to fetch public committee:', err);
+        if (isMounted) setIsPublicPortalLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // --- دالة موحدة لتطبيق بيانات المستخدم على واجهة التطبيق ---
   const applyUserData = (data) => {
     if (!data) return;
@@ -480,7 +290,15 @@ export default function App() {
       setIsSetupComplete(false);
     }
 
-    if (data.massWeddingData) setMassWeddingData(data.massWeddingData);
+    if (data.massWeddingData) {
+      setMassWeddingData(data.massWeddingData);
+      try {
+        localStorage.setItem('maraseem_latest_mass_wedding_data', JSON.stringify(data.massWeddingData));
+        (data.massWeddingData.committees || []).forEach((com) => {
+          syncCommitteeToPublicFirestore(db, com, data.massWeddingData.info);
+        });
+      } catch (e) { }
+    }
     if (data.guests) setGuests(data.guests);
     if (data.expenses) setExpenses(data.expenses);
     if (data.events) setEvents(data.events);
@@ -518,7 +336,6 @@ export default function App() {
       await setDoc(userDocRef, { [field]: value }, { merge: true });
       setFirestorePermissionError(false);
     } catch (error) {
-      console.error(`خطأ في حفظ ${field} في فايربيس:`, error);
       if (error?.code === 'permission-denied') {
         setFirestorePermissionError(true);
       }
@@ -566,7 +383,6 @@ export default function App() {
             }
           }
         } catch (error) {
-          console.error("خطأ في استرجاع البيانات من فايربيس:", error);
           if (error?.code === 'permission-denied') {
             setFirestorePermissionError(true);
           }
@@ -605,6 +421,20 @@ export default function App() {
     setMassWeddingData(newMassData);
     try {
       localStorage.setItem('maraseem_latest_mass_wedding_data', JSON.stringify(newMassData));
+      // نشر ومزامنة كل لجنة سحابياً للقراءة العامة ومحلياً
+      (newMassData.committees || []).forEach((com) => {
+        try {
+          localStorage.setItem(`maraseem_com_${com.id}`, JSON.stringify({
+            ...com,
+            weddingTitle: newMassData.info?.title,
+            weddingDate: newMassData.info?.date,
+            organizer: newMassData.info?.organizer,
+          }));
+          syncCommitteeToPublicFirestore(db, com, newMassData.info);
+        } catch (err) {
+          console.warn(err);
+        }
+      });
     } catch (e) {
       console.warn("فشل حفظ نسخة العرس الجماعي للبوابات:", e);
     }
@@ -635,7 +465,7 @@ export default function App() {
         const userDocRef = doc(db, 'users', user.uid);
         await setDoc(userDocRef, patch, { merge: true });
       } catch (err) {
-        console.error("Error clearing individual wedding:", err);
+        // Error clearing individual wedding intentionally suppressed
       }
     }
   };
@@ -661,7 +491,7 @@ export default function App() {
         const userDocRef = doc(db, 'users', user.uid);
         await setDoc(userDocRef, patch, { merge: true });
       } catch (err) {
-        console.error("Error clearing mass wedding:", err);
+        // Error clearing mass wedding intentionally suppressed
       }
     }
   };
@@ -847,7 +677,6 @@ export default function App() {
         setFirestorePermissionError(false);
         console.log("تم حفظ بيانات الزفاف بنجاح في السيرفر!");
       } catch (error) {
-        console.error("خطأ في حفظ البيانات في فايربيس:", error);
         if (error?.code === 'permission-denied') {
           setFirestorePermissionError(true);
         }
@@ -881,7 +710,7 @@ export default function App() {
 
   const massNavItems = [
     { id: 'overview', icon: <Sparkles size={20} />, label: isRtl ? 'نظرة عامة' : 'Overview' },
-    { id: 'couples', icon: <Users2 size={20} />, label: isRtl ? `سجل العرسان (${massWeddingData.couples?.length || 0})` : `Couples (${massWeddingData.couples?.length || 0})` },
+    { id: 'couples', icon: <Users2 size={20} />, label: isRtl ? `العرسان والعرائس (${(massWeddingData.grooms?.length || 0) + (massWeddingData.brides?.length || 0) || (massWeddingData.couples?.length || 0)})` : `Grooms & Brides (${(massWeddingData.grooms?.length || 0) + (massWeddingData.brides?.length || 0) || (massWeddingData.couples?.length || 0)})` },
     { id: 'committees', icon: <HeartHandshake size={20} />, label: isRtl ? `اللجان الميدانية (${massWeddingData.committees?.length || 0})` : `Committees (${massWeddingData.committees?.length || 0})` },
     { id: 'logistics', icon: <Utensils size={20} />, label: isRtl ? 'حاسبة الوليمة والتموين' : 'Rations & Logistics' },
     { id: 'budget', icon: <Coins size={20} />, label: isRtl ? 'الميزانية والرعايات' : 'Budget & Sponsors' },
@@ -1125,6 +954,17 @@ export default function App() {
   };
 
   const GuestsTab = () => {
+    const getGuestStats = (g) => {
+      const isFemale = g.gender === 'female';
+      const menAcc = Number(g.menAccompanying !== undefined ? g.menAccompanying : (g.accompanying !== undefined ? g.accompanying : 0));
+      const womenAcc = Number(g.womenAccompanying || 0);
+      const totalAcc = menAcc + womenAcc;
+      const men = isFemale ? menAcc : (menAcc + 1);
+      const women = isFemale ? (womenAcc + 1) : womenAcc;
+      const total = men + women;
+      return { isFemale, menAcc, womenAcc, totalAcc, men, women, total };
+    };
+
     const handleFileUpload = (event) => {
       const file = event.target.files[0];
       if (file) {
@@ -1135,16 +975,20 @@ export default function App() {
           if (lines.length <= 1) return; // No data or just header
 
           // Get headers and normalize them
-          const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+          const quoteRegex = /^"|"$/g;
+          const headers = lines[0].split(',').map(h => h.trim().replace(quoteRegex, ''));
           const parsedGuests = [];
 
           // Smart finding of column indices based on common Arabic/English headers
           const nameKey = headers.find(h => ['name', 'Name', 'الاسم', 'اسم العائلة', 'اسم الضيف'].includes(h));
           const sideKey = headers.find(h => ['side', 'Side', 'الجهة', 'إجراء', 'القرابة'].includes(h));
           const accKey = headers.find(h => ['accompanying', 'Accompanying', 'المرافقين', 'عدد المرافقين', 'المرافقون'].includes(h));
+          const menKey = headers.find(h => ['men', 'Men', 'رجال', 'المرافقين رجال', 'مرافقين رجال', 'مرافقين (رجال)', 'عدد الرجال'].includes(h));
+          const womenKey = headers.find(h => ['women', 'Women', 'نساء', 'المرافقين نساء', 'مرافقات', 'مرافقات نساء', 'مرافقين (نساء)', 'عدد النساء'].includes(h));
+          const genderKey = headers.find(h => ['gender', 'Gender', 'النوع', 'الجنس', 'صفة الممثل'].includes(h));
 
           for (let i = 1; i < lines.length; i++) {
-            const currentLine = lines[i].split(',').map(val => val.trim().replace(/^"|"$/g, ''));
+            const currentLine = lines[i].split(',').map(val => val.trim().replace(quoteRegex, ''));
             if (currentLine.length === 0 || (currentLine.length === 1 && currentLine[0] === '')) continue;
 
             const row = {};
@@ -1165,15 +1009,37 @@ export default function App() {
               mappedSide = 'brideSide';
             }
 
-            // Fallback to second column if accompanying key is missing
+            let rawMen = menKey ? row[menKey] : '';
+            let rawWomen = womenKey ? row[womenKey] : '';
             let rawAcc = accKey ? row[accKey] : currentLine[1];
+
+            let parsedMen = parseInt(rawMen, 10);
+            let parsedWomen = parseInt(rawWomen, 10);
             let parsedAcc = parseInt(rawAcc, 10);
-            if (isNaN(parsedAcc)) parsedAcc = 0; // Prevent NaN errors
+            if (isNaN(parsedAcc)) parsedAcc = 0;
+
+            if (isNaN(parsedMen) && isNaN(parsedWomen)) {
+              parsedMen = parsedAcc;
+              parsedWomen = 0;
+            } else {
+              if (isNaN(parsedMen)) parsedMen = 0;
+              if (isNaN(parsedWomen)) parsedWomen = 0;
+              parsedAcc = parsedMen + parsedWomen;
+            }
+
+            let rawGender = (genderKey ? row[genderKey] : '').trim().toLowerCase();
+            let mappedGender = 'male';
+            if (rawGender.includes('أنثى') || rawGender.includes('انثى') || rawGender.includes('امرأة') || rawGender.includes('سيدة') || rawGender.includes('female')) {
+              mappedGender = 'female';
+            }
 
             parsedGuests.push({
               id: Date.now() + i,
               name: guestName,
               side: mappedSide,
+              gender: mappedGender,
+              menAccompanying: parsedMen,
+              womenAccompanying: parsedWomen,
               accompanying: parsedAcc,
               status: 'pending'
             });
@@ -1190,9 +1056,11 @@ export default function App() {
       }
     };
 
-    const totalGroomSide = guests.filter(g => g.side === 'groomSide').reduce((sum, g) => sum + 1 + (g.accompanying || 0), 0);
-    const totalBrideSide = guests.filter(g => g.side === 'brideSide').reduce((sum, g) => sum + 1 + (g.accompanying || 0), 0);
+    const totalGroomSide = guests.filter(g => g.side === 'groomSide').reduce((sum, g) => sum + getGuestStats(g).total, 0);
+    const totalBrideSide = guests.filter(g => g.side === 'brideSide').reduce((sum, g) => sum + getGuestStats(g).total, 0);
     const totalAllGuests = totalGroomSide + totalBrideSide;
+    const totalMen = guests.reduce((sum, g) => sum + getGuestStats(g).men, 0);
+    const totalWomen = guests.reduce((sum, g) => sum + getGuestStats(g).women, 0);
 
     return (
       <div className="space-y-6">
@@ -1210,18 +1078,31 @@ export default function App() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 text-center">
-            <p className="text-amber-800 font-bold mb-1">{lang === 'ar' ? 'إجمالي الضيوف' : 'Total Guests'}</p>
+        {/* كروت الإحصائيات: حفظ تقسيم أهل العريس والعروس بالكامل + إظهار إجمالي الرجال والنساء */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+          <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 text-center col-span-2 sm:col-span-1">
+            <p className="text-amber-800 font-bold text-sm mb-1">{lang === 'ar' ? 'إجمالي الضيوف' : 'Total Guests'}</p>
             <p className="text-2xl font-black text-amber-900">{totalAllGuests}</p>
           </div>
           <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center">
-            <p className="text-blue-800 font-bold mb-1">{t.groomSide}</p>
+            <p className="text-blue-800 font-bold text-sm mb-1">{t.groomSide}</p>
             <p className="text-2xl font-black text-blue-900">{totalGroomSide}</p>
           </div>
           <div className="bg-rose-50 p-4 rounded-xl border border-rose-100 text-center">
-            <p className="text-rose-800 font-bold mb-1">{t.brideSide}</p>
+            <p className="text-rose-800 font-bold text-sm mb-1">{t.brideSide}</p>
             <p className="text-2xl font-black text-rose-900">{totalBrideSide}</p>
+          </div>
+          <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 text-center">
+            <p className="text-indigo-800 font-bold text-sm mb-1 flex items-center justify-center gap-1">
+              <span>👨</span> {t.menGuests}
+            </p>
+            <p className="text-2xl font-black text-indigo-900">{totalMen}</p>
+          </div>
+          <div className="bg-pink-50 p-4 rounded-xl border border-pink-100 text-center">
+            <p className="text-pink-800 font-bold text-sm mb-1 flex items-center justify-center gap-1">
+              <span>👩</span> {t.womenGuests}
+            </p>
+            <p className="text-2xl font-black text-pink-900">{totalWomen}</p>
           </div>
         </div>
 
@@ -1231,40 +1112,70 @@ export default function App() {
               <thead className="bg-amber-50/50 border-b border-amber-100 text-amber-800">
                 <tr>
                   <th className={`p-4 font-bold ${isRtl ? 'text-right' : 'text-left'}`}>{t.guestName}</th>
-                  <th className={`p-4 font-bold text-center`}>{t.accompanying}</th>
+                  <th className={`p-4 font-bold text-center`}>{t.accompanying} ({isRtl ? 'رجال ونساء' : 'Men & Women'})</th>
+                  <th className="p-4 font-bold text-center">{isRtl ? 'إجمالي الأفراد' : 'Total'}</th>
                   <th className="p-4 font-bold text-center">{t.actions}</th>
                 </tr>
               </thead>
               <tbody>
                 {guests.length === 0 ? (
                   <tr>
-                    <td colSpan="3" className="p-8 text-center text-gray-500">لا يوجد ضيوف مضافين بعد.</td>
+                    <td colSpan="4" className="p-8 text-center text-gray-500">لا يوجد ضيوف مضافين بعد.</td>
                   </tr>
                 ) : (
-                  guests.map((guest, idx) => (
-                    <tr key={guest.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="p-4 font-bold text-gray-800">{guest.name}</td>
-                      <td className="p-4 text-center font-bold text-amber-600 bg-amber-50/30">+{guest.accompanying}</td>
-                      <td className="p-4 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => { setEditingGuest(guest); setShowGuestModal(true); }}
-                            className="text-gray-400 hover:text-amber-600 p-1.5 rounded-lg transition"
-                            title={isRtl ? 'تعديل بيانات الضيف' : 'Edit Guest'}
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteGuest(guest.id)}
-                            className="text-gray-400 hover:text-red-500 p-1.5 rounded-lg transition"
-                            title={isRtl ? 'حذف الضيف' : 'Delete Guest'}
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                  guests.map((guest) => {
+                    const stats = getGuestStats(guest);
+                    return (
+                      <tr key={guest.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="p-4 font-bold text-gray-800">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span>{guest.name}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${guest.side === 'brideSide' ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
+                              {guest.side === 'brideSide' ? t.brideSide : t.groomSide}
+                            </span>
+                            {stats.isFemale && (
+                              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-pink-100 text-pink-700">
+                                👩 {isRtl ? 'سيدة' : 'Female'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="inline-flex items-center gap-2 flex-wrap justify-center text-xs sm:text-sm font-bold">
+                            <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg border border-indigo-100" title={isRtl ? 'مرافقين رجال' : 'Male companions'}>
+                              👨 <strong>+{stats.menAcc}</strong>
+                              <span className="text-[11px] font-normal text-indigo-600">{isRtl ? 'رجال' : 'men'}</span>
+                            </span>
+                            <span className="inline-flex items-center gap-1 bg-pink-50 text-pink-700 px-2.5 py-1 rounded-lg border border-pink-100" title={isRtl ? 'مرافقات نساء' : 'Female companions'}>
+                              👩 <strong>+{stats.womenAcc}</strong>
+                              <span className="text-[11px] font-normal text-pink-600">{isRtl ? 'نساء' : 'women'}</span>
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-4 text-center font-black text-amber-700 bg-amber-50/30">
+                          {stats.total}
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => { setEditingGuest(guest); setShowGuestModal(true); }}
+                              className="text-gray-400 hover:text-amber-600 p-1.5 rounded-lg transition"
+                              title={isRtl ? 'تعديل بيانات الضيف' : 'Edit Guest'}
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteGuest(guest.id)}
+                              className="text-gray-400 hover:text-red-500 p-1.5 rounded-lg transition"
+                              title={isRtl ? 'حذف الضيف' : 'Delete Guest'}
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -1410,7 +1321,12 @@ export default function App() {
         case 'sound_media': return <Music size={size} />;
         case 'photography': return <Camera size={size} />;
         case 'catering': return <UtensilsCrossed size={size} />;
+        case 'rentals': return <Tent size={size} />;
         case 'beauty': return <Sparkles size={size} />;
+        case 'groom_care': return <Scissors size={size} />;
+        case 'invitations': return <Mail size={size} />;
+        case 'car_decor': return <Car size={size} />;
+        case 'furniture': return <Bed size={size} />;
         default: return <Sparkles size={size} />;
       }
     };
@@ -1862,68 +1778,85 @@ export default function App() {
     );
   };
 
-  // --- التحقق من طلب بوابة اللجنة الميدانية المستقلة (وصول فوري للأعضاء والمتطوعين عبر واتساب) ---
+  // --- التحقق من طلب بوابة اللجنة الميدانية المستقلة (وصول فوري للأعضاء والمتطوعين بدون حساب) ---
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const isPortalRequested = urlParams && (urlParams.get('portal') === 'committee' || !!urlParams.get('committeeId'));
   const portalCommitteeId = urlParams ? urlParams.get('committeeId') : null;
   const portalCdata = urlParams ? urlParams.get('cdata') : null;
 
   if (isPortalRequested) {
-    let portalCommittee = decodeCommitteePortalData(portalCdata);
+    let resolvedCommittee = publicPortalCommittee;
     let weddingTitle = 'العرس الجماعي الخيري';
     let weddingDate = '';
     let organizer = 'اللجنة العليا المنظمة';
 
-    if (portalCommittee) {
-      weddingTitle = portalCommittee.weddingTitle || weddingTitle;
-      weddingDate = portalCommittee.weddingDate || weddingDate;
-      organizer = portalCommittee.organizer || organizer;
-    } else {
-      const findInList = (list) => (list || []).find((c) => c.id === portalCommitteeId);
-      portalCommittee = findInList(massWeddingData?.committees);
-      if (!portalCommittee && portalCommitteeId) {
-        try {
-          const directCom = localStorage.getItem(`maraseem_com_${portalCommitteeId}`);
-          if (directCom) {
-            portalCommittee = JSON.parse(directCom);
-            if (portalCommittee.weddingTitle) weddingTitle = portalCommittee.weddingTitle;
-            if (portalCommittee.weddingDate) weddingDate = portalCommittee.weddingDate;
-            if (portalCommittee.organizer) organizer = portalCommittee.organizer;
-          }
-        } catch (e) {
-          console.warn(e);
-        }
-      }
-      if (!portalCommittee) {
-        try {
-          const cached = localStorage.getItem('maraseem_latest_mass_wedding_data');
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            portalCommittee = findInList(parsed?.committees);
-            if (parsed?.info) {
-              weddingTitle = parsed.info.title || weddingTitle;
-              weddingDate = parsed.info.date || weddingDate;
-              organizer = parsed.info.organizer || organizer;
-            }
-          }
-        } catch (e) {
-          console.warn(e);
-        }
-      }
+    // 1. إذا لم يُجلب بعد، فحص cdata المضمن في الرابط
+    if (!resolvedCommittee && portalCdata) {
+      resolvedCommittee = decodeCommitteePortalData(portalCdata);
     }
 
-    if (portalCommittee) {
+    // 2. فحص ذاكرة اللجان الحالية
+    if (!resolvedCommittee && portalCommitteeId) {
+      const findInList = (list) => (list || []).find((c) => c.id === portalCommitteeId);
+      resolvedCommittee = findInList(massWeddingData?.committees);
+    }
+
+    // 3. فحص التخزين المباشر للجنة
+    if (!resolvedCommittee && portalCommitteeId) {
+      try {
+        const directCom = localStorage.getItem(`maraseem_com_${portalCommitteeId}`);
+        if (directCom) {
+          resolvedCommittee = JSON.parse(directCom);
+        }
+      } catch (e) { }
+    }
+
+    // 4. فحص كاش العرس الجماعي
+    if (!resolvedCommittee && portalCommitteeId) {
+      try {
+        const cached = localStorage.getItem('maraseem_latest_mass_wedding_data');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          resolvedCommittee = (parsed?.committees || []).find((c) => c.id === portalCommitteeId);
+        }
+      } catch (e) { }
+    }
+
+    if (resolvedCommittee) {
+      weddingTitle = resolvedCommittee.weddingTitle || massWeddingData?.info?.title || weddingTitle;
+      weddingDate = resolvedCommittee.weddingDate || massWeddingData?.info?.date || weddingDate;
+      organizer = resolvedCommittee.organizer || massWeddingData?.info?.organizer || organizer;
+    }
+
+    // شاشة تحميل أنيقة أثناء جلب البيانات السحابية العامة
+    if (isPublicPortalLoading && !resolvedCommittee) {
       return (
-        <CommitteePortalView
-          committee={portalCommittee}
-          weddingTitle={weddingTitle}
-          weddingDate={weddingDate}
-          organizer={organizer}
-          isStandalone={true}
-          isRtl={isRtl}
-        />
+        <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 text-white" dir={isRtl ? 'rtl' : 'ltr'}>
+          <div className="flex flex-col items-center gap-4 max-w-sm text-center">
+            <div className="w-16 h-16 rounded-3xl bg-amber-500/20 border border-amber-400/40 text-amber-400 flex items-center justify-center font-black text-2xl shadow-lg">
+              م
+            </div>
+            <div className="w-10 h-10 border-4 border-amber-400 border-t-transparent rounded-full animate-spin mt-2"></div>
+            <h3 className="font-black text-lg text-white">جاري فتح بوابة اللجنة الميدانية...</h3>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              يتم جلب بيانات وتوجيهات لجنتك مباشرة بدون الحاجة لتسجيل دخول
+            </p>
+          </div>
+        </div>
       );
     }
+
+    // عرض بوابة اللجنة مباشرة (منع الانتقال لصفحة تسجيل الدخول نهائياً)
+    return (
+      <CommitteePortalView
+        committee={resolvedCommittee}
+        weddingTitle={weddingTitle}
+        weddingDate={weddingDate}
+        organizer={organizer}
+        isStandalone={true}
+        isRtl={isRtl}
+      />
+    );
   }
 
   // Auth loading check
@@ -2398,11 +2331,19 @@ export default function App() {
               e.preventDefault();
               const formData = new FormData(e.target);
 
+              const menAcc = Math.max(0, Number(formData.get('menAccompanying')) || 0);
+              const womenAcc = Math.max(0, Number(formData.get('womenAccompanying')) || 0);
+              const totalAcc = menAcc + womenAcc;
+              const gender = formData.get('gender') || 'male';
+
               const guestData = {
                 id: editingGuest ? editingGuest.id : Date.now(),
                 name: formData.get('name'),
                 side: formData.get('side'),
-                accompanying: Number(formData.get('accompanying')) || 0,
+                gender: gender,
+                menAccompanying: menAcc,
+                womenAccompanying: womenAcc,
+                accompanying: totalAcc,
                 status: editingGuest ? (editingGuest.status || 'pending') : 'pending'
               };
 
@@ -2420,21 +2361,79 @@ export default function App() {
             }} className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">{t.guestName}</label>
-                <input type="text" name="name" defaultValue={editingGuest?.name || ''} required className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none font-bold" />
+                <input
+                  type="text"
+                  name="name"
+                  defaultValue={editingGuest?.name || ''}
+                  required
+                  placeholder={isRtl ? 'مثال: سالم باوزير أو عائلة فلان' : 'e.g. Salem Bawazir'}
+                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none font-bold"
+                />
               </div>
-              <div className="flex gap-4">
-                <div className="flex-1">
+
+              {/* تقسيم أهل العريس والعروسة كما هو تماماً + صفة الممثل */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">{isRtl ? 'الجهة' : 'Side'}</label>
                   <select name="side" defaultValue={editingGuest?.side || 'groomSide'} className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none bg-white font-bold">
                     <option value="groomSide">{t.groomSide}</option>
                     <option value="brideSide">{t.brideSide}</option>
                   </select>
                 </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-bold text-gray-700 mb-1">{t.accompanying}</label>
-                  <input type="number" name="accompanying" defaultValue={editingGuest?.accompanying !== undefined ? editingGuest.accompanying : 0} min="0" className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none font-bold" />
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">{isRtl ? 'صفة الممثل' : 'Rep. Gender'}</label>
+                  <select name="gender" defaultValue={editingGuest?.gender || 'male'} className="w-full border border-gray-300 rounded-xl p-2.5 focus:ring-2 focus:ring-amber-500 outline-none bg-white font-bold">
+                    <option value="male">{isRtl ? '👨 رجل' : '👨 Male'}</option>
+                    <option value="female">{isRtl ? '👩 سيدة / امرأة' : '👩 Female'}</option>
+                  </select>
                 </div>
               </div>
+
+              {/* قسم المرافقين مقسوم إلى رجال ونساء */}
+              <div className="bg-amber-50/70 p-4 rounded-2xl border border-amber-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-black text-amber-900">
+                    {t.accompanying} ({isRtl ? 'المرافقين الإضافيين' : 'Plus-Ones'})
+                  </label>
+                  <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                    {isRtl ? 'رجال ونساء' : 'Men & Women'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-indigo-900 mb-1">
+                      {isRtl ? '👨 مرافقين (رجال)' : '👨 Men'}
+                    </label>
+                    <input
+                      type="number"
+                      name="menAccompanying"
+                      defaultValue={editingGuest?.menAccompanying !== undefined ? editingGuest.menAccompanying : (editingGuest?.accompanying !== undefined ? editingGuest.accompanying : 0)}
+                      min="0"
+                      className="w-full border border-indigo-200 rounded-xl p-2.5 focus:ring-2 focus:ring-indigo-500 outline-none font-bold bg-white text-indigo-950"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-pink-900 mb-1">
+                      {isRtl ? '👩 مرافقات (نساء)' : '👩 Women'}
+                    </label>
+                    <input
+                      type="number"
+                      name="womenAccompanying"
+                      defaultValue={editingGuest?.womenAccompanying !== undefined ? editingGuest.womenAccompanying : 0}
+                      min="0"
+                      className="w-full border border-pink-200 rounded-xl p-2.5 focus:ring-2 focus:ring-pink-500 outline-none font-bold bg-white text-pink-950"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-amber-800/80 font-medium">
+                  {isRtl
+                    ? '* إجمالي الدعوة = ممثل العائلة (1) + عدد المرافقين (رجال ونساء)'
+                    : '* Total invite attendees = Representative (1) + Companions (Men & Women)'}
+                </p>
+              </div>
+
               <div className="flex justify-end gap-2 mt-6">
                 <button type="button" onClick={() => { setShowGuestModal(false); setEditingGuest(null); }} className="px-5 py-2.5 text-gray-600 font-bold hover:bg-gray-100 rounded-xl transition">{t.cancel}</button>
                 <button type="submit" className="px-5 py-2.5 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition">
