@@ -12,12 +12,14 @@ import {
 import {
   calculateMassWeddingLogistics,
   DEFAULT_CALCULATOR_RATES,
-  DEFAULT_CUSTOM_LOGISTICS_ITEMS
+  DEFAULT_CUSTOM_LOGISTICS_ITEMS,
+  DEFAULT_MASS_WEDDING_COMMITTEES
 } from '../data/massWeddingTemplates';
 import CommandBroadcastHub from './CommandBroadcastHub';
 import CommitteeQrModal from './CommitteeQrModal';
 import CommitteePortalView from './CommitteePortalView';
-import { generateCommitteePortalUrl } from '../utils/portalHelpers';
+import { generateCommitteePortalUrl, syncCommitteeToPublicFirestore } from '../utils/portalHelpers';
+import { db } from '../firebase';
 
 export default function MassWeddingDashboard({
   data,
@@ -38,9 +40,40 @@ export default function MassWeddingDashboard({
     if (onTabChange) onTabChange(tab);
   };
 
-  // --- Modals State ---
-  const [showAddCoupleModal, setShowAddCoupleModal] = useState(false);
-  const [editingCouple, setEditingCouple] = useState(null);
+  // --- Modals & Roster State ---
+  const [rosterSubTab, setRosterSubTab] = useState('grooms'); // 'grooms' | 'brides'
+
+  // Grooms Modals & Search
+  const [showAddGroomModal, setShowAddGroomModal] = useState(false);
+  const [editingGroom, setEditingGroom] = useState(null);
+  const [groomSearch, setGroomSearch] = useState('');
+  const [groomFilter, setGroomFilter] = useState('all'); // 'all' | 'ready' | 'pending'
+  const [showBulkImportGroomsModal, setShowBulkImportGroomsModal] = useState(false);
+  const [bulkExcelGrooms, setBulkExcelGrooms] = useState([]);
+  const [bulkExcelGroomsMode, setBulkExcelGroomsMode] = useState('append'); // 'append' | 'replace'
+  const [bulkExcelGroomsFileName, setBulkExcelGroomsFileName] = useState('');
+  const [bulkExcelGroomsError, setBulkExcelGroomsError] = useState('');
+
+  // Brides Modals & Search
+  const [showAddBrideModal, setShowAddBrideModal] = useState(false);
+  const [editingBride, setEditingBride] = useState(null);
+  const [brideSearch, setBrideSearch] = useState('');
+  const [brideFilter, setBrideFilter] = useState('all'); // 'all' | 'ready' | 'pending'
+  const [showBulkImportBridesModal, setShowBulkImportBridesModal] = useState(false);
+  const [bulkExcelBrides, setBulkExcelBrides] = useState([]);
+  const [bulkExcelBridesMode, setBulkExcelBridesMode] = useState('append'); // 'append' | 'replace'
+  const [bulkExcelBridesFileName, setBulkExcelBridesFileName] = useState('');
+  const [bulkExcelBridesError, setBulkExcelBridesError] = useState('');
+
+  // Backward compatibility aliases
+  const showAddCoupleModal = showAddGroomModal;
+  const setShowAddCoupleModal = setShowAddGroomModal;
+  const editingCouple = editingGroom;
+  const setEditingCouple = setEditingGroom;
+  const coupleSearch = groomSearch;
+  const setCoupleSearch = setGroomSearch;
+  const coupleFilter = groomFilter;
+  const setCoupleFilter = setGroomFilter;
   const [showAddCommitteeModal, setShowAddCommitteeModal] = useState(false);
   const [editingCommittee, setEditingCommittee] = useState(null);
   const [showAddSponsorModal, setShowAddSponsorModal] = useState(false);
@@ -59,6 +92,11 @@ export default function MassWeddingDashboard({
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
   const [showImportExcelModal, setShowImportExcelModal] = useState(false);
+  const [showBulkImportCommitteesModal, setShowBulkImportCommitteesModal] = useState(false);
+  const [bulkExcelCommittees, setBulkExcelCommittees] = useState([]);
+  const [bulkExcelMode, setBulkExcelMode] = useState('append'); // 'append' | 'replace'
+  const [bulkExcelFileName, setBulkExcelFileName] = useState('');
+  const [bulkExcelError, setBulkExcelError] = useState('');
   const [showPdfReportModal, setShowPdfReportModal] = useState(false);
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [excelPreviewMembers, setExcelPreviewMembers] = useState([]);
@@ -73,16 +111,6 @@ export default function MassWeddingDashboard({
   const [portalPreviewCommittee, setPortalPreviewCommittee] = useState(null);
   const [copiedPortalFor, setCopiedPortalFor] = useState(null);
 
-  // --- Search & Filters ---
-  const [coupleSearch, setCoupleSearch] = useState('');
-  const [coupleFilter, setCoupleFilter] = useState('all'); // 'all' | 'ready' | 'pending'
-
-  // --- AI State ---
-  const [aiPromptType, setAiPromptType] = useState('invitation'); // 'invitation' | 'speech' | 'directives'
-  const [aiOutput, setAiOutput] = useState('');
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [copiedAi, setCopiedAi] = useState(false);
-
   // Safe Fallback Data
   const weddingInfo = data.info || {};
   const couples = data.couples || [];
@@ -90,6 +118,55 @@ export default function MassWeddingDashboard({
   const sponsorships = data.sponsorships || [];
   const expenses = data.expenses || [];
   const schedule = data.schedule || [];
+
+  // Normalized Grooms & Brides with graceful fallback to legacy couples
+  const grooms = useMemo(() => {
+    if (Array.isArray(data.grooms) && data.grooms.length > 0) return data.grooms;
+    if (Array.isArray(data.couples) && data.couples.length > 0) {
+      return data.couples.map((c, idx) => ({
+        id: c.id || `groom-${idx}`,
+        name: c.groomName || c.name || `عريس ${idx + 1}`,
+        phone: c.groomPhone || c.phone || '',
+        nationalId: c.nationalId || '',
+        tribe: c.tribe || '',
+        area: c.area || '',
+        guestQuota: c.guestQuota !== undefined && c.guestQuota !== '' ? c.guestQuota : 35,
+        medicalStatus: c.medicalStatus || 'pending',
+        contractStatus: c.contractStatus || 'in_progress',
+        aidStatus: c.aidStatus || 'processing',
+        partnerBrideId: c.brideName ? `bride-legacy-${idx}` : '',
+        partnerBrideName: c.brideName || '',
+        notes: c.notes || ''
+      }));
+    }
+    return [];
+  }, [data.grooms, data.couples]);
+
+  const brides = useMemo(() => {
+    if (Array.isArray(data.brides) && data.brides.length > 0) return data.brides;
+    if (Array.isArray(data.couples) && data.couples.length > 0) {
+      return data.couples
+        .filter((c) => c.brideName)
+        .map((c, idx) => ({
+          id: `bride-legacy-${idx}`,
+          name: c.brideName || `عروس ${idx + 1}`,
+          phone: c.bridePhone || '',
+          guardianName: c.guardianName || '',
+          guardianPhone: c.guardianPhone || '',
+          guardianRelation: c.guardianRelation || 'أب',
+          nationalId: '',
+          tribe: c.tribe || '',
+          area: c.area || '',
+          guestQuota: c.guestQuota !== undefined && c.guestQuota !== '' ? c.guestQuota : 25,
+          medicalStatus: c.medicalStatus || 'pending',
+          contractStatus: c.contractStatus || 'in_progress',
+          partnerGroomId: c.id || `groom-${idx}`,
+          partnerGroomName: c.groomName || '',
+          notes: ''
+        }));
+    }
+    return [];
+  }, [data.brides, data.couples]);
 
   // --- Calculations ---
   const daysLeft = weddingInfo.date
@@ -109,7 +186,15 @@ export default function MassWeddingDashboard({
     Math.round((totalSponsorships / (weddingInfo.estimatedTotalBudget || 1)) * 100)
   );
 
-  const completedCouplesCount = useMemo(() => {
+  const completedGroomsCount = useMemo(() => {
+    return grooms.filter((g) => g.medicalStatus === 'completed' && g.contractStatus === 'completed').length;
+  }, [grooms]);
+
+  const completedBridesCount = useMemo(() => {
+    return brides.filter((b) => b.medicalStatus === 'completed' && b.contractStatus === 'completed').length;
+  }, [brides]);
+
+  const completedCouplesCount = completedGroomsCount || useMemo(() => {
     return couples.filter(
       (c) => c.medicalStatus === 'completed' && c.contractStatus === 'completed'
     ).length;
@@ -118,6 +203,36 @@ export default function MassWeddingDashboard({
   const totalVolunteers = useMemo(() => {
     return committees.reduce((sum, com) => sum + (Number(com.volunteersCount) || 0), 0);
   }, [committees]);
+
+  // --- Committee Detailed Memoized Computations ---
+  const activeCommittee = useMemo(() => {
+    return committees.find((c) => c.id === selectedCommitteeId);
+  }, [committees, selectedCommitteeId]);
+
+  const { comTasks, completedTasksCount, taskCompletionPct, comMembers } = useMemo(() => {
+    if (!selectedCommitteeId || !activeCommittee) {
+      return { comTasks: [], completedTasksCount: 0, taskCompletionPct: 0, comMembers: [] };
+    }
+    const tasks = (activeCommittee.tasks && activeCommittee.tasks.length > 0)
+      ? activeCommittee.tasks
+      : (activeCommittee.responsibilities || []).map((r, i) => ({ id: `task-${i}`, text: r, completed: false }));
+    const completed = tasks.filter((t) => t.completed).length;
+    const pct = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0;
+    const members = activeCommittee.members || [];
+    return { comTasks: tasks, completedTasksCount: completed, taskCompletionPct: pct, comMembers: members };
+  }, [selectedCommitteeId, activeCommittee]);
+
+  const filteredMembers = useMemo(() => {
+    return comMembers.filter((m) => {
+      if (!memberSearchQuery.trim()) return true;
+      const q = memberSearchQuery.toLowerCase();
+      return (
+        (m.name && m.name.toLowerCase().includes(q)) ||
+        (m.phone && m.phone.toLowerCase().includes(q)) ||
+        (m.role && m.role.toLowerCase().includes(q))
+      );
+    });
+  }, [comMembers, memberSearchQuery]);
 
   // Dynamic Logistics & Custom Rates Calculation
   const calculatorRates = useMemo(() => {
@@ -130,12 +245,12 @@ export default function MassWeddingDashboard({
 
   const logistics = useMemo(() => {
     return calculateMassWeddingLogistics(
-      couples,
+      { grooms, brides, couples },
       weddingInfo,
       calculatorRates,
       customItems
     );
-  }, [couples, weddingInfo, calculatorRates, customItems]);
+  }, [grooms, brides, couples, weddingInfo, calculatorRates, customItems]);
 
   const filteredSupplies = useMemo(() => {
     return (logistics.customSupplies || []).filter((item) => {
@@ -150,70 +265,383 @@ export default function MassWeddingDashboard({
   // Overall Readiness Score
   const readinessScore = useMemo(() => {
     let score = 20; // Base score for having an organized event
-    if (couples.length > 0) {
-      score += Math.round((completedCouplesCount / couples.length) * 35);
+    const participantsTotal = Math.max(grooms.length, brides.length, couples.length);
+    if (participantsTotal > 0) {
+      score += Math.round((completedCouplesCount / participantsTotal) * 35);
     }
     if (totalSponsorships >= totalExpenses && totalExpenses > 0) score += 25;
     else if (totalSponsorships > 0) score += 15;
     if (committees.length >= 4) score += 20;
     return Math.min(100, score);
-  }, [couples, completedCouplesCount, totalSponsorships, totalExpenses, committees]);
+  }, [couples, grooms, brides, completedCouplesCount, totalSponsorships, totalExpenses, committees]);
 
-  // --- Handlers: Couples ---
-  const handleSaveCouple = (coupleData) => {
+  // --- Handlers: Grooms ---
+  const handleSaveGroom = (groomData) => {
     let updated;
-    if (coupleData.id && couples.some((c) => c.id === coupleData.id)) {
-      updated = couples.map((c) => (c.id === coupleData.id ? { ...c, ...coupleData } : c));
+    const finalGroom = { ...groomData, id: groomData.id || `groom-${Date.now()}` };
+    if (groomData.id && grooms.some((g) => g.id === groomData.id)) {
+      updated = grooms.map((g) => (g.id === groomData.id ? { ...g, ...groomData } : g));
     } else {
-      updated = [{ ...coupleData, id: coupleData.id || `c-${Date.now()}` }, ...couples];
+      updated = [finalGroom, ...grooms];
     }
-    onUpdateData({ ...data, couples: updated });
-    setShowAddCoupleModal(false);
-    setEditingCouple(null);
+    // Sync to legacy couples array as well for complete compatibility
+    const updatedCouples = updated.map((g, idx) => ({
+      id: g.id,
+      groomName: g.name,
+      groomPhone: g.phone,
+      brideName: g.partnerBrideName || (brides[idx]?.name || ''),
+      tribe: g.tribe,
+      area: g.area,
+      phone: g.phone,
+      guestQuota: g.guestQuota,
+      medicalStatus: g.medicalStatus,
+      contractStatus: g.contractStatus,
+      aidStatus: g.aidStatus,
+      notes: g.notes
+    }));
+    onUpdateData({ ...data, grooms: updated, couples: updatedCouples });
+    setShowAddGroomModal(false);
+    setEditingGroom(null);
   };
 
-  const handleEditCouple = (couple) => {
-    setEditingCouple(couple);
-    setShowAddCoupleModal(true);
+  const handleEditGroom = (groom) => {
+    setEditingGroom(groom);
+    setShowAddGroomModal(true);
   };
 
-  const handleDeleteCouple = (coupleId) => {
-    if (window.confirm(isRtl ? 'هل أنت متأكد من حذف هذا العريس من السجل؟' : 'Remove this couple from the roster?')) {
-      const updated = couples.filter((c) => c.id !== coupleId);
-      onUpdateData({ ...data, couples: updated });
-      if (editingCouple?.id === coupleId) {
-        setEditingCouple(null);
-        setShowAddCoupleModal(false);
+  const handleDeleteGroom = (groomId) => {
+    if (window.confirm(isRtl ? 'هل أنت متأكد من حذف هذا العريس من السجل؟' : 'Remove this groom from the roster?')) {
+      const updated = grooms.filter((g) => g.id !== groomId);
+      const updatedCouples = couples.filter((c) => c.id !== groomId);
+      onUpdateData({ ...data, grooms: updated, couples: updatedCouples });
+      if (editingGroom?.id === groomId) {
+        setEditingGroom(null);
+        setShowAddGroomModal(false);
       }
     }
   };
 
-  const handleToggleCoupleStatus = (coupleId, field) => {
-    const updated = couples.map((c) => {
-      if (c.id === coupleId) {
+  const handleToggleGroomStatus = (groomId, field) => {
+    const updated = grooms.map((g) => {
+      if (g.id === groomId) {
         if (field === 'medicalStatus') {
-          return { ...c, medicalStatus: c.medicalStatus === 'completed' ? 'pending' : 'completed' };
+          return { ...g, medicalStatus: g.medicalStatus === 'completed' ? 'pending' : 'completed' };
         }
         if (field === 'contractStatus') {
-          return { ...c, contractStatus: c.contractStatus === 'completed' ? 'in_progress' : 'completed' };
+          return { ...g, contractStatus: g.contractStatus === 'completed' ? 'in_progress' : 'completed' };
         }
         if (field === 'aidStatus') {
-          return { ...c, aidStatus: c.aidStatus === 'delivered' ? 'processing' : 'delivered' };
+          return { ...g, aidStatus: g.aidStatus === 'delivered' ? 'processing' : 'delivered' };
         }
       }
-      return c;
+      return g;
     });
-    onUpdateData({ ...data, couples: updated });
+    onUpdateData({ ...data, grooms: updated });
   };
+
+  const handleDownloadGroomsSampleCsv = () => {
+    const headers = ['اسم العريس', 'رقم الهاتف', 'الرقم الوطني', 'القبيلة واللقب', 'المنطقة السكنية', 'عدد المعازيم', 'الفحص الطبي', 'عقد القران', 'استلام المساعدة', 'اسم العروس المقترنة', 'ملاحظات'];
+    const sampleRows = [
+      ['محمد عبدالله باوزير', '771234567', '08010023451', 'باوزير', 'حي الروضة - المكلا', '35', 'مكتمل', 'موثق', 'تم الاستلام', 'فاطمة أحمد', 'مستوفي جميع الوثائق الرسمية'],
+      ['صالح علي بن محفوظ', '773456789', '08010045612', 'بن محفوظ', 'فوة القديمة', '40', 'مكتمل', 'قيد التوثيق', 'قيد التجهيز', 'مريم سالم', 'يحتاج متابعة توثيق العقد الشرعي']
+    ];
+    const csvContent = '\uFEFF' + [headers.join(','), ...sampleRows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `نموذج_استيراد_العرسان.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleBulkGroomsFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkExcelGroomsFileName(file.name);
+    setBulkExcelGroomsError('');
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const dataRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+        if (!dataRows || dataRows.length < 1) {
+          setBulkExcelGroomsError(isRtl ? 'الملف فارغ.' : 'File is empty.');
+          return;
+        }
+
+        const firstRow = dataRows[0].map(h => String(h || '').trim().toLowerCase());
+        const findColIdx = (aliases) => firstRow.findIndex(h => aliases.some(a => h.includes(a)));
+
+        const nameIdx = findColIdx(['اسم العريس', 'الاسم', 'العريس', 'عريس', 'اسم', 'name', 'groom']);
+        const phoneIdx = findColIdx(['رقم الهاتف', 'الهاتف', 'الجوال', 'تلفون', 'phone', 'mobile']);
+        const nationalIdIdx = findColIdx(['الرقم الوطني', 'السجل المدني', 'رقم الهوية', 'الهوية', 'national_id', 'nationalid']);
+        const tribeIdx = findColIdx(['القبيلة', 'اللقب', 'العائلة', 'tribe', 'family']);
+        const areaIdx = findColIdx(['المنطقة', 'السكن', 'الحي', 'المدينة', 'area', 'residence']);
+        const quotaIdx = findColIdx(['كوتة المعازيم', 'عدد المعازيم', 'المعازيم', 'دعوات', 'quota', 'guests']);
+        const medicalIdx = findColIdx(['الفحص الطبي', 'فحص طبي', 'medical']);
+        const contractIdx = findColIdx(['عقد القران', 'عقد', 'contract']);
+        const aidIdx = findColIdx(['المساعدة', 'المنحة', 'الكسوة', 'aid', 'grant']);
+        const partnerBrideIdx = findColIdx(['اسم العروس', 'العروس', 'الزوجة', 'bride']);
+        const notesIdx = findColIdx(['ملاحظات', 'ملاحظة', 'notes', 'note']);
+
+        const hasHeader = nameIdx !== -1 || phoneIdx !== -1;
+        const startRowIdx = hasHeader ? 1 : 0;
+        const actualNameIdx = nameIdx !== -1 ? nameIdx : 0;
+
+        const parsedGrooms = [];
+        for (let i = startRowIdx; i < dataRows.length; i++) {
+          const row = dataRows[i];
+          if (!row || row.length === 0) continue;
+          const nameVal = String(row[actualNameIdx] || '').trim();
+          if (!nameVal) continue;
+
+          const phoneVal = phoneIdx !== -1 ? String(row[phoneIdx] || '').trim() : '';
+          const nationalIdVal = nationalIdIdx !== -1 ? String(row[nationalIdIdx] || '').trim() : '';
+          const tribeVal = tribeIdx !== -1 ? String(row[tribeIdx] || '').trim() : '';
+          const areaVal = areaIdx !== -1 ? String(row[areaIdx] || '').trim() : (weddingInfo.city || '');
+          const quotaVal = quotaIdx !== -1 ? (Number(row[quotaIdx]) || 35) : 35;
+
+          const medStr = medicalIdx !== -1 ? String(row[medicalIdx] || '').trim().toLowerCase() : '';
+          const isMedicalDone = medStr.includes('مكتمل') || medStr.includes('نعم') || medStr.includes('done') || medStr.includes('completed') || medStr.includes('1') || medStr.includes('جاهز');
+
+          const conStr = contractIdx !== -1 ? String(row[contractIdx] || '').trim().toLowerCase() : '';
+          const isContractDone = conStr.includes('موثق') || conStr.includes('مكتمل') || conStr.includes('نعم') || conStr.includes('done') || conStr.includes('completed') || conStr.includes('1');
+
+          const aidStr = aidIdx !== -1 ? String(row[aidIdx] || '').trim().toLowerCase() : '';
+          const isAidDelivered = aidStr.includes('مستلم') || aidStr.includes('تم') || aidStr.includes('delivered') || aidStr.includes('1');
+
+          const partnerBrideVal = partnerBrideIdx !== -1 ? String(row[partnerBrideIdx] || '').trim() : '';
+          const notesVal = notesIdx !== -1 ? String(row[notesIdx] || '').trim() : '';
+
+          parsedGrooms.push({
+            id: `groom-import-${Date.now()}-${i}`,
+            name: nameVal,
+            phone: phoneVal,
+            nationalId: nationalIdVal,
+            tribe: tribeVal,
+            area: areaVal,
+            guestQuota: quotaVal,
+            medicalStatus: isMedicalDone ? 'completed' : 'pending',
+            contractStatus: isContractDone ? 'completed' : 'in_progress',
+            aidStatus: isAidDelivered ? 'delivered' : 'processing',
+            partnerBrideName: partnerBrideVal,
+            notes: notesVal
+          });
+        }
+
+        if (parsedGrooms.length === 0) {
+          setBulkExcelGroomsError(isRtl ? 'لم يتم العثور على بيانات عرسان صالحة في الملف.' : 'No valid groom records found.');
+        } else {
+          setBulkExcelGrooms(parsedGrooms);
+        }
+      } catch (err) {
+        console.error('Error parsing grooms excel:', err);
+        setBulkExcelGroomsError(isRtl ? 'حدث خطأ أثناء قراءة الملف. تأكد من الصيغة الصحيحة.' : 'Error reading file.');
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleConfirmBulkImportGrooms = () => {
+    if (!bulkExcelGrooms || bulkExcelGrooms.length === 0) return;
+    const finalGrooms = bulkExcelGroomsMode === 'replace' ? [...bulkExcelGrooms] : [...grooms, ...bulkExcelGrooms];
+    onUpdateData({ ...data, grooms: finalGrooms });
+    setBulkExcelGrooms([]);
+    setBulkExcelGroomsFileName('');
+    setBulkExcelGroomsError('');
+    setShowBulkImportGroomsModal(false);
+  };
+
+  // --- Handlers: Brides ---
+  const handleSaveBride = (brideData) => {
+    let updated;
+    const finalBride = { ...brideData, id: brideData.id || `bride-${Date.now()}` };
+    if (brideData.id && brides.some((b) => b.id === brideData.id)) {
+      updated = brides.map((b) => (b.id === brideData.id ? { ...b, ...brideData } : b));
+    } else {
+      updated = [finalBride, ...brides];
+    }
+    onUpdateData({ ...data, brides: updated });
+    setShowAddBrideModal(false);
+    setEditingBride(null);
+  };
+
+  const handleEditBride = (bride) => {
+    setEditingBride(bride);
+    setShowAddBrideModal(true);
+  };
+
+  const handleDeleteBride = (brideId) => {
+    if (window.confirm(isRtl ? 'هل أنت متأكد من حذف هذه العروس من السجل؟' : 'Remove this bride from the roster?')) {
+      const updated = brides.filter((b) => b.id !== brideId);
+      onUpdateData({ ...data, brides: updated });
+      if (editingBride?.id === brideId) {
+        setEditingBride(null);
+        setShowAddBrideModal(false);
+      }
+    }
+  };
+
+  const handleToggleBrideStatus = (brideId, field) => {
+    const updated = brides.map((b) => {
+      if (b.id === brideId) {
+        if (field === 'medicalStatus') {
+          return { ...b, medicalStatus: b.medicalStatus === 'completed' ? 'pending' : 'completed' };
+        }
+        if (field === 'contractStatus') {
+          return { ...b, contractStatus: b.contractStatus === 'completed' ? 'in_progress' : 'completed' };
+        }
+      }
+      return b;
+    });
+    onUpdateData({ ...data, brides: updated });
+  };
+
+  const handleDownloadBridesSampleCsv = () => {
+    const headers = ['اسم العروس', 'اسم ولي الأمر', 'صلة القرابة', 'هاتف ولي الأمر', 'هاتف العروس', 'الرقم الوطني', 'القبيلة واللقب', 'المنطقة السكنية', 'كوتة صالة النساء', 'الفحص الطبي', 'عقد القران', 'اسم العريس المقترن', 'ملاحظات'];
+    const sampleRows = [
+      ['فاطمة أحمد باوزير', 'أحمد سعيد باوزير', 'أب', '770987654', '771122334', '08010078901', 'باوزير', 'حي الروضة - المكلا', '30', 'مكتمل', 'موثق', 'محمد عبدالله باوزير', 'تأكيد حجز صالة النساء مسبقاً'],
+      ['مريم سالم الكندي', 'سالم عمر الكندي', 'أب', '772334455', '', '08010099881', 'الكندي', 'الديس', '25', 'مكتمل', 'قيد التوثيق', 'صالح علي بن محفوظ', '']
+    ];
+    const csvContent = '\uFEFF' + [headers.join(','), ...sampleRows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `نموذج_استيراد_العرائس.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleBulkBridesFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkExcelBridesFileName(file.name);
+    setBulkExcelBridesError('');
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const dataRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+        if (!dataRows || dataRows.length < 1) {
+          setBulkExcelBridesError(isRtl ? 'الملف فارغ.' : 'File is empty.');
+          return;
+        }
+
+        const firstRow = dataRows[0].map(h => String(h || '').trim().toLowerCase());
+        const findColIdx = (aliases) => firstRow.findIndex(h => aliases.some(a => h.includes(a)));
+
+        const nameIdx = findColIdx(['اسم العروس', 'العروس', 'الاسم', 'عروس', 'name', 'bride']);
+        const guardianNameIdx = findColIdx(['اسم ولي الأمر', 'ولي الأمر', 'الولي', 'اسم الولي', 'guardian', 'guardian_name']);
+        const guardianRelationIdx = findColIdx(['صلة القرابة', 'القرابة', 'صلة', 'relation']);
+        const guardianPhoneIdx = findColIdx(['هاتف ولي الأمر', 'جوال ولي الأمر', 'رقم ولي الأمر', 'guardian_phone']);
+        const phoneIdx = findColIdx(['هاتف العروس', 'جوال العروس', 'رقم الهاتف', 'الهاتف', 'phone', 'mobile']);
+        const nationalIdIdx = findColIdx(['الرقم الوطني', 'السجل المدني', 'الهوية', 'national_id']);
+        const tribeIdx = findColIdx(['القبيلة', 'اللقب', 'العائلة', 'tribe', 'family']);
+        const areaIdx = findColIdx(['المنطقة', 'السكن', 'الحي', 'المدينة', 'area', 'residence']);
+        const quotaIdx = findColIdx(['كوتة صالة النساء', 'صالة النساء', 'عدد المعازيم', 'المعازيم', 'quota', 'guests']);
+        const medicalIdx = findColIdx(['الفحص الطبي', 'فحص طبي', 'medical']);
+        const contractIdx = findColIdx(['عقد القران', 'عقد', 'contract']);
+        const partnerGroomIdx = findColIdx(['اسم العريس', 'العريس', 'الزوج', 'groom']);
+        const notesIdx = findColIdx(['ملاحظات', 'ملاحظة', 'notes']);
+
+        const hasHeader = nameIdx !== -1 || guardianNameIdx !== -1;
+        const startRowIdx = hasHeader ? 1 : 0;
+        const actualNameIdx = nameIdx !== -1 ? nameIdx : 0;
+
+        const parsedBrides = [];
+        for (let i = startRowIdx; i < dataRows.length; i++) {
+          const row = dataRows[i];
+          if (!row || row.length === 0) continue;
+          const nameVal = String(row[actualNameIdx] || '').trim();
+          if (!nameVal) continue;
+
+          const guardianNameVal = guardianNameIdx !== -1 ? String(row[guardianNameIdx] || '').trim() : '';
+          const guardianRelationVal = guardianRelationIdx !== -1 ? String(row[guardianRelationIdx] || '').trim() : 'أب';
+          const guardianPhoneVal = guardianPhoneIdx !== -1 ? String(row[guardianPhoneIdx] || '').trim() : '';
+          const phoneVal = phoneIdx !== -1 ? String(row[phoneIdx] || '').trim() : '';
+          const nationalIdVal = nationalIdIdx !== -1 ? String(row[nationalIdIdx] || '').trim() : '';
+          const tribeVal = tribeIdx !== -1 ? String(row[tribeIdx] || '').trim() : '';
+          const areaVal = areaIdx !== -1 ? String(row[areaIdx] || '').trim() : (weddingInfo.city || '');
+          const quotaVal = quotaIdx !== -1 ? (Number(row[quotaIdx]) || 25) : 25;
+
+          const medStr = medicalIdx !== -1 ? String(row[medicalIdx] || '').trim().toLowerCase() : '';
+          const isMedicalDone = medStr.includes('مكتمل') || medStr.includes('نعم') || medStr.includes('done') || medStr.includes('completed') || medStr.includes('1') || medStr.includes('جاهز');
+
+          const conStr = contractIdx !== -1 ? String(row[contractIdx] || '').trim().toLowerCase() : '';
+          const isContractDone = conStr.includes('موثق') || conStr.includes('مكتمل') || conStr.includes('نعم') || conStr.includes('done') || conStr.includes('completed') || conStr.includes('1');
+
+          const partnerGroomVal = partnerGroomIdx !== -1 ? String(row[partnerGroomIdx] || '').trim() : '';
+          const notesVal = notesIdx !== -1 ? String(row[notesIdx] || '').trim() : '';
+
+          parsedBrides.push({
+            id: `bride-import-${Date.now()}-${i}`,
+            name: nameVal,
+            guardianName: guardianNameVal,
+            guardianRelation: guardianRelationVal,
+            guardianPhone: guardianPhoneVal,
+            phone: phoneVal,
+            nationalId: nationalIdVal,
+            tribe: tribeVal,
+            area: areaVal,
+            guestQuota: quotaVal,
+            medicalStatus: isMedicalDone ? 'completed' : 'pending',
+            contractStatus: isContractDone ? 'completed' : 'in_progress',
+            partnerGroomName: partnerGroomVal,
+            notes: notesVal
+          });
+        }
+
+        if (parsedBrides.length === 0) {
+          setBulkExcelBridesError(isRtl ? 'لم يتم العثور على بيانات عرائس صالحة في الملف.' : 'No valid bride records found.');
+        } else {
+          setBulkExcelBrides(parsedBrides);
+        }
+      } catch (err) {
+        console.error('Error parsing brides excel:', err);
+        setBulkExcelBridesError(isRtl ? 'حدث خطأ أثناء قراءة الملف. تأكد من الصيغة الصحيحة.' : 'Error reading file.');
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleConfirmBulkImportBrides = () => {
+    if (!bulkExcelBrides || bulkExcelBrides.length === 0) return;
+    const finalBrides = bulkExcelBridesMode === 'replace' ? [...bulkExcelBrides] : [...brides, ...bulkExcelBrides];
+    onUpdateData({ ...data, brides: finalBrides });
+    setBulkExcelBrides([]);
+    setBulkExcelBridesFileName('');
+    setBulkExcelBridesError('');
+    setShowBulkImportBridesModal(false);
+  };
+
+  // Legacy couple compatibility handlers
+  const handleSaveCouple = handleSaveGroom;
+  const handleEditCouple = handleEditGroom;
+  const handleDeleteCouple = handleDeleteGroom;
+  const handleToggleCoupleStatus = handleToggleGroomStatus;
 
   // --- Handlers: Committees ---
   const handleSaveCommittee = (comData) => {
     let updated;
+    const finalCom = { ...comData, id: comData.id || `com-${Date.now()}` };
     if (comData.id && committees.some((com) => com.id === comData.id)) {
       updated = committees.map((com) => (com.id === comData.id ? { ...com, ...comData } : com));
     } else {
-      updated = [...committees, { ...comData, id: comData.id || `com-${Date.now()}` }];
+      updated = [...committees, finalCom];
     }
+    syncCommitteeToPublicFirestore(db, finalCom, weddingInfo);
     onUpdateData({ ...data, committees: updated });
     setShowAddCommitteeModal(false);
     setEditingCommittee(null);
@@ -226,6 +654,141 @@ export default function MassWeddingDashboard({
       : (committee.responsibilities || ['']);
     setFormDynamicTasks(existingTasks.length > 0 ? existingTasks : ['']);
     setShowAddCommitteeModal(true);
+  };
+
+  // إدراج اللجان الميدانية الافتراضية الـ 14 (لجنة الصالة، العقد، السامان، العشاء، النظام، الفرش، الماء البارد، المغاسيل، العرسان، الذبح، الطبخ، المسرح، الإعلام، الصحة)
+  const handleLoadDefaultCommittees = (replace = false) => {
+    const freshDefaults = DEFAULT_MASS_WEDDING_COMMITTEES.map((c, idx) => ({
+      ...c,
+      id: `com-${c.id.replace('com-', '')}-${Date.now().toString(36)}-${idx}`
+    }));
+
+    let updated;
+    if (replace || committees.length === 0) {
+      updated = freshDefaults;
+    } else {
+      const existingNames = new Set(committees.map(c => c.name.trim().toLowerCase()));
+      const toAdd = freshDefaults.filter(c => !existingNames.has(c.name.trim().toLowerCase()));
+      if (toAdd.length === 0) {
+        alert(isRtl ? 'كافة اللجان الافتراضية مضافة بالفعل!' : 'All default committees are already added!');
+        return;
+      }
+      updated = [...committees, ...toAdd];
+    }
+
+    onUpdateData({ ...data, committees: updated });
+    updated.forEach((com) => {
+      syncCommitteeToPublicFirestore(db, com, weddingInfo);
+    });
+    alert(isRtl ? `تم إدراج ${freshDefaults.length} لجنة ميدانية بنجاح! ✓` : `Loaded ${freshDefaults.length} default committees! ✓`);
+  };
+
+  // استيراد اللجان دفعة واحدة من ملف إكسل أو CSV
+  const handleBulkExcelFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkExcelFileName(file.name);
+    setBulkExcelError('');
+    setBulkExcelCommittees([]);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const dataRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+        if (!dataRows || dataRows.length < 1) {
+          setBulkExcelError(isRtl ? 'الملف فارغ.' : 'File is empty.');
+          return;
+        }
+
+        const firstRow = dataRows[0].map(h => String(h || '').trim().toLowerCase());
+        const hasHeader = firstRow.some(h =>
+          h.includes('لجنة') || h.includes('اسم') || h.includes('name') || h.includes('committee')
+        );
+
+        let startRow = 0;
+        let nameIdx = 0;
+        let leaderIdx = -1;
+        let phoneIdx = -1;
+        let volunteersIdx = -1;
+
+        if (hasHeader && dataRows.length > 1) {
+          startRow = 1;
+          nameIdx = firstRow.findIndex(h => h.includes('لجنة') || h.includes('اسم') || h.includes('name') || h.includes('committee'));
+          if (nameIdx === -1) nameIdx = 0;
+          leaderIdx = firstRow.findIndex(h => h.includes('مشرف') || h.includes('مسؤول') || h.includes('رئيس') || h.includes('leader'));
+          phoneIdx = firstRow.findIndex(h => h.includes('هاتف') || h.includes('جوال') || h.includes('تلفون') || h.includes('phone') || h.includes('mobile'));
+          volunteersIdx = firstRow.findIndex(h => h.includes('متطوع') || h.includes('عدد') || h.includes('volunteers') || h.includes('count'));
+        }
+
+        const parsed = [];
+        for (let i = startRow; i < dataRows.length; i++) {
+          const row = dataRows[i];
+          if (!row || row.length === 0) continue;
+          const name = String(row[nameIdx] || '').trim();
+          if (!name) continue;
+
+          const leader = leaderIdx !== -1 ? String(row[leaderIdx] || '').trim() : '';
+          const phone = phoneIdx !== -1 ? String(row[phoneIdx] || '').trim() : '';
+          const volunteers = volunteersIdx !== -1 ? (Number(row[volunteersIdx]) || '') : '';
+
+          parsed.push({
+            id: `com-import-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`,
+            name,
+            nameEn: '',
+            leader,
+            phone,
+            volunteersCount: volunteers,
+            responsibilities: [],
+            tasks: [],
+            members: []
+          });
+        }
+
+        if (parsed.length === 0) {
+          setBulkExcelError(isRtl ? 'لم يتم العثور على أي أسماء لجان صالحة في الملف.' : 'No valid committee names found in file.');
+        } else {
+          setBulkExcelCommittees(parsed);
+        }
+      } catch (err) {
+        console.error('Error parsing committees excel file:', err);
+        setBulkExcelError(isRtl ? 'تعذر قراءة الملف. يرجى التأكد من صيغة الملف (.xlsx أو .csv).' : 'Failed to parse file.');
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleConfirmBulkImport = () => {
+    if (!bulkExcelCommittees || bulkExcelCommittees.length === 0) return;
+    let updated;
+    if (bulkExcelMode === 'replace') {
+      updated = bulkExcelCommittees;
+    } else {
+      updated = [...committees, ...bulkExcelCommittees];
+    }
+
+    onUpdateData({ ...data, committees: updated });
+    updated.forEach(c => syncCommitteeToPublicFirestore(db, c, weddingInfo));
+    setShowBulkImportCommitteesModal(false);
+    setBulkExcelCommittees([]);
+    setBulkExcelFileName('');
+    alert(isRtl ? `تم استيراد ${bulkExcelCommittees.length} لجنة بنجاح! ✓` : `Imported ${bulkExcelCommittees.length} committees! ✓`);
+  };
+
+  const handleDownloadBulkCommitteesSampleCsv = () => {
+    const csvContent = "\uFEFFاسم اللجنة,مشرف اللجنة,رقم الهاتف,عدد المتطوعين\nلجنة الصالة (النساء),,,15\nلجنة السامان والتغسيل,,,20\nلجنة العقد,,,10\nلجنة توزيع العشاء,,,25\nلجنة النظام,,,30\nلجنة الفرش وساحة الزواج,,,20\nلجنة الماء البارد,,,12\nلجنة المغاسيل,,,8\nلجنة العرسان,,,10\nلجنة الذبح واللحوم,,,15\nلجنة طبخ الوليمة,,,18\nلجنة المسرح وتجهيزه,,,10\nلجنة الاعلام,,,8\nلجنة الصحة والاسعاف,,,6\n";
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'نموذج_استيراد_اللجان_مراسيم.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   // --- Handlers: Committee Members & Tasks ---
@@ -272,7 +835,7 @@ export default function MassWeddingDashboard({
         const currentTasks = (com.tasks && com.tasks.length > 0)
           ? com.tasks
           : (com.responsibilities || []).map((r, i) => ({ id: `task-${i}`, text: r, completed: false }));
-        
+
         const updatedTasks = currentTasks.map((t, idx) => {
           const tid = t.id || `task-${idx}`;
           if (tid === taskId || idx === taskId) {
@@ -445,9 +1008,18 @@ export default function MassWeddingDashboard({
   };
 
   const handleOpenQrModal = (committee) => {
+    syncCommitteeToPublicFirestore(db, committee, weddingInfo);
     const url = generateCommitteePortalUrl(committee, weddingInfo);
     setQrModalData({ committee, portalUrl: url });
   };
+
+  // مزامنة سحابية عامة لكافة اللجان لضمان فتح الروابط ورموز QR فوراً بدون حساب
+  React.useEffect(() => {
+    if (!committees || committees.length === 0) return;
+    committees.forEach((com) => {
+      syncCommitteeToPublicFirestore(db, com, weddingInfo);
+    });
+  }, [committees.length]);
 
   // --- Handlers: Sponsors & Expenses ---
   const handleSaveSponsor = (spData) => {
@@ -637,13 +1209,59 @@ export default function MassWeddingDashboard({
     setTimeout(() => setCopiedAi(false), 2000);
   };
 
-  // Filtered Couples
+  // Filtered Grooms
+  const filteredGrooms = useMemo(() => {
+    return grooms.filter((g) => {
+      const q = groomSearch.trim().toLowerCase();
+      const matchesSearch = !q ||
+        (g.name && g.name.toLowerCase().includes(q)) ||
+        (g.phone && g.phone.toLowerCase().includes(q)) ||
+        (g.nationalId && g.nationalId.toLowerCase().includes(q)) ||
+        (g.tribe && g.tribe.toLowerCase().includes(q)) ||
+        (g.area && g.area.toLowerCase().includes(q)) ||
+        (g.partnerBrideName && g.partnerBrideName.toLowerCase().includes(q));
+
+      const isReady = g.medicalStatus === 'completed' && g.contractStatus === 'completed';
+      const matchesFilter =
+        groomFilter === 'all' ||
+        (groomFilter === 'ready' && isReady) ||
+        (groomFilter === 'pending' && !isReady);
+
+      return matchesSearch && matchesFilter;
+    });
+  }, [grooms, groomSearch, groomFilter]);
+
+  // Filtered Brides
+  const filteredBrides = useMemo(() => {
+    return brides.filter((b) => {
+      const q = brideSearch.trim().toLowerCase();
+      const matchesSearch = !q ||
+        (b.name && b.name.toLowerCase().includes(q)) ||
+        (b.guardianName && b.guardianName.toLowerCase().includes(q)) ||
+        (b.guardianPhone && b.guardianPhone.toLowerCase().includes(q)) ||
+        (b.phone && b.phone.toLowerCase().includes(q)) ||
+        (b.nationalId && b.nationalId.toLowerCase().includes(q)) ||
+        (b.tribe && b.tribe.toLowerCase().includes(q)) ||
+        (b.area && b.area.toLowerCase().includes(q)) ||
+        (b.partnerGroomName && b.partnerGroomName.toLowerCase().includes(q));
+
+      const isReady = b.medicalStatus === 'completed' && b.contractStatus === 'completed';
+      const matchesFilter =
+        brideFilter === 'all' ||
+        (brideFilter === 'ready' && isReady) ||
+        (brideFilter === 'pending' && !isReady);
+
+      return matchesSearch && matchesFilter;
+    });
+  }, [brides, brideSearch, brideFilter]);
+
+  // Legacy Filtered Couples
   const filteredCouples = useMemo(() => {
     return couples.filter((c) => {
       const matchesSearch =
-        c.groomName.toLowerCase().includes(coupleSearch.toLowerCase()) ||
-        c.tribe.toLowerCase().includes(coupleSearch.toLowerCase()) ||
-        c.area.toLowerCase().includes(coupleSearch.toLowerCase());
+        (c.groomName && c.groomName.toLowerCase().includes(coupleSearch.toLowerCase())) ||
+        (c.tribe && c.tribe.toLowerCase().includes(coupleSearch.toLowerCase())) ||
+        (c.area && c.area.toLowerCase().includes(coupleSearch.toLowerCase()));
       if (!matchesSearch) return false;
 
       if (coupleFilter === 'ready') {
@@ -666,202 +1284,202 @@ export default function MassWeddingDashboard({
         <div className="space-y-6">
 
           {/* --- 1. HERO BANNER --- */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-700 via-amber-800 to-orange-900 text-white p-6 sm:p-8 shadow-xl">
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/5 rounded-full blur-2xl pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-64 h-64 bg-orange-500/10 rounded-full blur-2xl pointer-events-none"></div>
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-700 via-amber-800 to-orange-900 text-white p-6 sm:p-8 shadow-xl">
+            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/5 rounded-full blur-2xl pointer-events-none"></div>
+            <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-64 h-64 bg-orange-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
-        {/* Small Edit Event Button in Top Corner */}
-        {onOpenSettings && (
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="absolute top-4 sm:top-6 ltr:right-4 ltr:sm:right-6 rtl:left-4 rtl:sm:left-6 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs backdrop-blur-md transition border border-white/20 hover:border-white/40 shadow-sm"
-            title={isRtl ? 'تعديل بيانات العرس الجماعي' : 'Edit Event Info'}
-          >
-            <Edit3 size={13} className="text-amber-300" />
-            <span>{isRtl ? 'تعديل الفعالية' : 'Edit Event'}</span>
-          </button>
-        )}
+            {/* Small Edit Event Button in Top Corner */}
+            {onOpenSettings && (
+              <button
+                type="button"
+                onClick={onOpenSettings}
+                className="absolute top-4 sm:top-6 ltr:right-4 ltr:sm:right-6 rtl:left-4 rtl:sm:left-6 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs backdrop-blur-md transition border border-white/20 hover:border-white/40 shadow-sm"
+                title={isRtl ? 'تعديل بيانات العرس الجماعي' : 'Edit Event Info'}
+              >
+                <Edit3 size={13} className="text-amber-300" />
+                <span>{isRtl ? 'تعديل الفعالية' : 'Edit Event'}</span>
+              </button>
+            )}
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold tracking-wide flex items-center gap-1.5 border border-white/20">
-                <Users2 size={14} className="text-amber-200" />
-                <span>{isRtl ? 'نظام إدارة الأعراس الجماعية' : 'Mass Wedding Management'}</span>
-              </span>
-              <span className="px-3 py-1 rounded-full bg-amber-500/30 text-amber-200 text-xs font-semibold flex items-center gap-1">
-                <Building2 size={13} />
-                <span>{weddingInfo.organizer}</span>
-              </span>
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold tracking-wide flex items-center gap-1.5 border border-white/20">
+                    <Users2 size={14} className="text-amber-200" />
+                    <span>{isRtl ? 'نظام إدارة الأعراس الجماعية' : 'Mass Wedding Management'}</span>
+                  </span>
+                  <span className="px-3 py-1 rounded-full bg-amber-500/30 text-amber-200 text-xs font-semibold flex items-center gap-1">
+                    <Building2 size={13} />
+                    <span>{weddingInfo.organizer}</span>
+                  </span>
+                </div>
+
+                <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white flex items-center gap-3">
+                  <span>{weddingInfo.title}</span>
+                </h1>
+
+                <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-amber-100/90 pt-1">
+                  <span className="flex items-center gap-1.5">
+                    <MapPin size={16} className="text-amber-300 shrink-0" />
+                    <span>{weddingInfo.location}</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Calendar size={16} className="text-amber-300 shrink-0" />
+                    <span>{weddingInfo.date}</span>
+                  </span>
+                  <span className="flex items-center gap-1.5 bg-amber-900/60 px-2.5 py-0.5 rounded-lg border border-amber-600/40">
+                    <Clock size={14} className="text-amber-300" />
+                    <span>
+                      {daysLeft > 0
+                        ? isRtl ? `${daysLeft} يوم متبقي على الفعالية` : `${daysLeft} days until event`
+                        : isRtl ? 'اليوم يوم الفعالية الكبرى! 🎉' : 'Event Day! 🎉'}
+                    </span>
+                  </span>
+                </div>
+              </div>
             </div>
 
-            <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white flex items-center gap-3">
-              <span>{weddingInfo.title}</span>
-            </h1>
-
-            <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-amber-100/90 pt-1">
-              <span className="flex items-center gap-1.5">
-                <MapPin size={16} className="text-amber-300 shrink-0" />
-                <span>{weddingInfo.location}</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Calendar size={16} className="text-amber-300 shrink-0" />
-                <span>{weddingInfo.date}</span>
-              </span>
-              <span className="flex items-center gap-1.5 bg-amber-900/60 px-2.5 py-0.5 rounded-lg border border-amber-600/40">
-                <Clock size={14} className="text-amber-300" />
-                <span>
-                  {daysLeft > 0
-                    ? isRtl ? `${daysLeft} يوم متبقي على الفعالية` : `${daysLeft} days until event`
-                    : isRtl ? 'اليوم يوم الفعالية الكبرى! 🎉' : 'Event Day! 🎉'}
+            {/* Readiness Bar */}
+            <div className="mt-6 pt-5 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={18} className="text-amber-300" />
+                <span className="font-bold text-white">
+                  {isRtl ? 'مؤشر الجاهزية العامة للفعالية:' : 'Overall Event Readiness:'}
                 </span>
+                <span className="font-black text-amber-300 text-sm">{readinessScore}%</span>
+              </div>
+
+              <div className="flex-1 max-w-md bg-black/30 rounded-full h-2.5 overflow-hidden border border-white/10">
+                <div
+                  className="h-full bg-gradient-to-r from-amber-400 to-emerald-400 transition-all duration-500"
+                  style={{ width: `${readinessScore}%` }}
+                ></div>
+              </div>
+
+              <span className="text-amber-200 text-xs">
+                {readinessScore > 75
+                  ? isRtl ? 'جاهزية عالية جداً وممتازة ✨' : 'High Readiness ✨'
+                  : isRtl ? 'التجهيزات جارية على قدم وساق ⚙️' : 'In Progress ⚙️'}
               </span>
             </div>
           </div>
-        </div>
 
-        {/* Readiness Bar */}
-        <div className="mt-6 pt-5 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2">
-            <ShieldCheck size={18} className="text-amber-300" />
-            <span className="font-bold text-white">
-              {isRtl ? 'مؤشر الجاهزية العامة للفعالية:' : 'Overall Event Readiness:'}
-            </span>
-            <span className="font-black text-amber-300 text-sm">{readinessScore}%</span>
-          </div>
+          {/* --- 2. KPI METRIC CARDS --- */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
 
-          <div className="flex-1 max-w-md bg-black/30 rounded-full h-2.5 overflow-hidden border border-white/10">
+            {/* Metric 1: Registered Couples */}
             <div
-              className="h-full bg-gradient-to-r from-amber-400 to-emerald-400 transition-all duration-500"
-              style={{ width: `${readinessScore}%` }}
-            ></div>
-          </div>
-
-          <span className="text-amber-200 text-xs">
-            {readinessScore > 75
-              ? isRtl ? 'جاهزية عالية جداً وممتازة ✨' : 'High Readiness ✨'
-              : isRtl ? 'التجهيزات جارية على قدم وساق ⚙️' : 'In Progress ⚙️'}
-          </span>
-        </div>
-      </div>
-
-      {/* --- 2. KPI METRIC CARDS --- */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-
-        {/* Metric 1: Registered Couples */}
-        <div
-          onClick={() => setActiveSubTab('couples')}
-          className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-sm hover:border-amber-400 cursor-pointer transition group"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-gray-500">
-              {isRtl ? 'العرسان المسجلون' : 'Registered Couples'}
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center group-hover:scale-110 transition">
-              <Users2 size={18} />
+              onClick={() => setActiveSubTab('couples')}
+              className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-sm hover:border-amber-400 cursor-pointer transition group"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-gray-500">
+                  {isRtl ? 'العرسان المسجلون' : 'Registered Couples'}
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center group-hover:scale-110 transition">
+                  <Users2 size={18} />
+                </div>
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-gray-900">
+                {couples.length} <span className="text-xs text-gray-400 font-normal">/ {weddingInfo.targetCouples || 24}</span>
+              </div>
+              <div className="text-[11px] text-emerald-600 font-bold mt-1">
+                {completedCouplesCount} {isRtl ? 'عريس مكتمل الفحص والعقد ✓' : 'Fully verified ✓'}
+              </div>
             </div>
-          </div>
-          <div className="text-xl sm:text-2xl font-black text-gray-900">
-            {couples.length} <span className="text-xs text-gray-400 font-normal">/ {weddingInfo.targetCouples || 24}</span>
-          </div>
-          <div className="text-[11px] text-emerald-600 font-bold mt-1">
-            {completedCouplesCount} {isRtl ? 'عريس مكتمل الفحص والعقد ✓' : 'Fully verified ✓'}
-          </div>
-        </div>
 
-        {/* Metric 2: Total Budget & Sponsorships */}
-        <div
-          onClick={() => setActiveSubTab('budget')}
-          className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-sm hover:border-emerald-400 cursor-pointer transition group"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-gray-500">
-              {isRtl ? 'إجمالي الرعايات والتبرعات' : 'Total Funds Raised'}
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:scale-110 transition">
-              <Coins size={18} />
+            {/* Metric 2: Total Budget & Sponsorships */}
+            <div
+              onClick={() => setActiveSubTab('budget')}
+              className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-sm hover:border-emerald-400 cursor-pointer transition group"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-gray-500">
+                  {isRtl ? 'إجمالي الرعايات والتبرعات' : 'Total Funds Raised'}
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:scale-110 transition">
+                  <Coins size={18} />
+                </div>
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-gray-900">
+                {(totalSponsorships / 1000000).toFixed(1)} <span className="text-xs text-gray-400 font-normal">{isRtl ? 'مليون ر.ي' : 'M YER'}</span>
+              </div>
+              <div className="text-[11px] text-gray-500 font-semibold mt-1">
+                {budgetProgress}% {isRtl ? 'من الميزانية التقديرية' : 'of target budget'}
+              </div>
             </div>
-          </div>
-          <div className="text-xl sm:text-2xl font-black text-gray-900">
-            {(totalSponsorships / 1000000).toFixed(1)} <span className="text-xs text-gray-400 font-normal">{isRtl ? 'مليون ر.ي' : 'M YER'}</span>
-          </div>
-          <div className="text-[11px] text-gray-500 font-semibold mt-1">
-            {budgetProgress}% {isRtl ? 'من الميزانية التقديرية' : 'of target budget'}
-          </div>
-        </div>
 
-        {/* Metric 3: Total Guests & Capacity */}
-        <div
-          onClick={() => setActiveSubTab('logistics')}
-          className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-sm hover:border-orange-400 cursor-pointer transition group"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-gray-500">
-              {isRtl ? 'الضيوف المتوقعين' : 'Expected Guests'}
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-orange-50 text-orange-700 flex items-center justify-center group-hover:scale-110 transition">
-              <Utensils size={18} />
+            {/* Metric 3: Total Guests & Capacity */}
+            <div
+              onClick={() => setActiveSubTab('logistics')}
+              className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-sm hover:border-orange-400 cursor-pointer transition group"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-gray-500">
+                  {isRtl ? 'الضيوف المتوقعين' : 'Expected Guests'}
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-orange-50 text-orange-700 flex items-center justify-center group-hover:scale-110 transition">
+                  <Utensils size={18} />
+                </div>
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-gray-900">
+                {logistics.totalGuests.toLocaleString()}{' '}
+                <span className="text-xs text-gray-400 font-normal">{isRtl ? 'ضيف' : 'guests'}</span>
+              </div>
+              <div className="text-[11px] text-amber-700 font-bold mt-1">
+                {logistics.customSupplies.length > 0
+                  ? (isRtl ? `${logistics.customSupplies.length} مواد تموين مضافة` : `${logistics.customSupplies.length} supplies listed`)
+                  : (isRtl ? 'حاسبة التموين تبدأ من الصفر' : 'Supplies start from zero')}
+              </div>
             </div>
-          </div>
-          <div className="text-xl sm:text-2xl font-black text-gray-900">
-            {logistics.totalGuests.toLocaleString()}{' '}
-            <span className="text-xs text-gray-400 font-normal">{isRtl ? 'ضيف' : 'guests'}</span>
-          </div>
-          <div className="text-[11px] text-amber-700 font-bold mt-1">
-            {logistics.customSupplies.length > 0
-              ? (isRtl ? `${logistics.customSupplies.length} مواد تموين مضافة` : `${logistics.customSupplies.length} supplies listed`)
-              : (isRtl ? 'حاسبة التموين تبدأ من الصفر' : 'Supplies start from zero')}
-          </div>
-        </div>
 
-        {/* Metric 4: Organizing Committees & Volunteers */}
-        <div
-          onClick={() => setActiveSubTab('committees')}
-          className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-sm hover:border-blue-400 cursor-pointer transition group"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-gray-500">
-              {isRtl ? 'اللجان والمتطوعين' : 'Committees & Teams'}
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center group-hover:scale-110 transition">
-              <HeartHandshake size={18} />
+            {/* Metric 4: Organizing Committees & Volunteers */}
+            <div
+              onClick={() => setActiveSubTab('committees')}
+              className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-sm hover:border-blue-400 cursor-pointer transition group"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-gray-500">
+                  {isRtl ? 'اللجان والمتطوعين' : 'Committees & Teams'}
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center group-hover:scale-110 transition">
+                  <HeartHandshake size={18} />
+                </div>
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-gray-900">
+                {committees.length}{' '}
+                <span className="text-xs text-gray-400 font-normal">{isRtl ? 'لجان' : 'committees'}</span>
+              </div>
+              <div className="text-[11px] text-blue-600 font-bold mt-1">
+                {totalVolunteers} {isRtl ? 'متطوع ميداني' : 'volunteers'}
+              </div>
             </div>
-          </div>
-          <div className="text-xl sm:text-2xl font-black text-gray-900">
-            {committees.length}{' '}
-            <span className="text-xs text-gray-400 font-normal">{isRtl ? 'لجان' : 'committees'}</span>
-          </div>
-          <div className="text-[11px] text-blue-600 font-bold mt-1">
-            {totalVolunteers} {isRtl ? 'متطوع ميداني' : 'volunteers'}
-          </div>
-        </div>
 
-        {/* Metric 5: Custom Logistics & Supplies */}
-        <div
-          onClick={() => setActiveSubTab('logistics')}
-          className="col-span-2 lg:col-span-1 bg-gradient-to-br from-amber-50 to-orange-50 p-4 sm:p-5 rounded-2xl border border-amber-200/80 shadow-sm hover:border-amber-400 cursor-pointer transition group"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-amber-900">
-              {isRtl ? 'مواد ومؤن التموين' : 'Catering & Supplies'}
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-amber-600 text-white flex items-center justify-center group-hover:scale-110 transition">
-              <Utensils size={18} />
+            {/* Metric 5: Custom Logistics & Supplies */}
+            <div
+              onClick={() => setActiveSubTab('logistics')}
+              className="col-span-2 lg:col-span-1 bg-gradient-to-br from-amber-50 to-orange-50 p-4 sm:p-5 rounded-2xl border border-amber-200/80 shadow-sm hover:border-amber-400 cursor-pointer transition group"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-amber-900">
+                  {isRtl ? 'مواد ومؤن التموين' : 'Catering & Supplies'}
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-amber-600 text-white flex items-center justify-center group-hover:scale-110 transition">
+                  <Utensils size={18} />
+                </div>
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-amber-950">
+                {logistics.customSupplies.length}{' '}
+                <span className="text-xs text-amber-800 font-normal">{isRtl ? 'مواد مضافة' : 'items'}</span>
+              </div>
+              <div className="text-[11px] text-amber-800 font-bold mt-1">
+                {logistics.customSupplies.length > 0
+                  ? (isRtl ? 'محسوبة حسب الضيوف' : 'Calculated by guests')
+                  : (isRtl ? 'حساب مخصص من الصفر' : 'Custom calculated from scratch')}
+              </div>
             </div>
-          </div>
-          <div className="text-xl sm:text-2xl font-black text-amber-950">
-            {logistics.customSupplies.length}{' '}
-            <span className="text-xs text-amber-800 font-normal">{isRtl ? 'مواد مضافة' : 'items'}</span>
-          </div>
-          <div className="text-[11px] text-amber-800 font-bold mt-1">
-            {logistics.customSupplies.length > 0
-              ? (isRtl ? 'محسوبة حسب الضيوف' : 'Calculated by guests')
-              : (isRtl ? 'حساب مخصص من الصفر' : 'Custom calculated from scratch')}
-          </div>
-        </div>
 
-      </div>
+          </div>
 
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -938,40 +1556,40 @@ export default function MassWeddingDashboard({
                     </div>
                   ) : (
                     schedule.slice(0, 4).map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-3 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-between gap-3 text-xs"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="font-bold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-xl shrink-0">
-                          {item.time}
-                        </span>
-                        <div>
-                          <div className="font-extrabold text-gray-900 text-sm">{item.title}</div>
-                          <div className="text-gray-500 text-xs flex items-center gap-2 mt-0.5">
-                            <span>{item.location}</span>
-                            <span>•</span>
-                            <span>{item.coordinator}</span>
+                      <div
+                        key={item.id}
+                        className="p-3 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-xl shrink-0">
+                            {item.time}
+                          </span>
+                          <div>
+                            <div className="font-extrabold text-gray-900 text-sm">{item.title}</div>
+                            <div className="text-gray-500 text-xs flex items-center gap-2 mt-0.5">
+                              <span>{item.location}</span>
+                              <span>•</span>
+                              <span>{item.coordinator}</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      <span
-                        className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${item.status === 'completed'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : item.status === 'ongoing'
-                            ? 'bg-amber-100 text-amber-800 animate-pulse'
-                            : 'bg-gray-200 text-gray-700'
-                          }`}
-                      >
-                        {item.status === 'completed'
-                          ? isRtl ? 'مكتمل ✓' : 'Done ✓'
-                          : item.status === 'ongoing'
-                            ? isRtl ? 'جاري الآن ⏳' : 'Ongoing'
-                            : isRtl ? 'قادم' : 'Upcoming'}
-                      </span>
-                    </div>
-                  ))
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${item.status === 'completed'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : item.status === 'ongoing'
+                              ? 'bg-amber-100 text-amber-800 animate-pulse'
+                              : 'bg-gray-200 text-gray-700'
+                            }`}
+                        >
+                          {item.status === 'completed'
+                            ? isRtl ? 'مكتمل ✓' : 'Done ✓'
+                            : item.status === 'ongoing'
+                              ? isRtl ? 'جاري الآن ⏳' : 'Ongoing'
+                              : isRtl ? 'قادم' : 'Upcoming'}
+                        </span>
+                      </div>
+                    ))
                   )}
                 </div>
               </div>
@@ -1057,253 +1675,645 @@ export default function MassWeddingDashboard({
         </div>
       )}
 
-      {/* === SUB-TAB 2: COUPLES ROSTER === */}
+      {/* === SUB-TAB 2: GROOMS & BRIDES ROSTER === */}
       {activeSubTab === 'couples' && (
         <div className="space-y-6">
 
-          {/* Couples Specialized Hero Banner */}
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-700 via-orange-800 to-amber-900 text-white p-6 sm:p-7 shadow-lg">
-            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
-
-            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div className="space-y-1.5 max-w-2xl">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20 text-amber-100">
-                  <Users2 size={14} />
-                  <span>{isRtl ? 'سجل العرسان والتوثيق الميداني' : 'Couples Roster & Verification'}</span>
-                </div>
-                <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-                  <span>{isRtl ? 'سجل العرسان واعتماد العقود والفحوصات' : 'Registered Couples & Approvals'}</span>
-                </h3>
-                <p className="text-xs sm:text-sm text-amber-100/90 leading-relaxed">
-                  {isRtl
-                    ? `إدارة بيانات العرسان المشاركين (${couples.length} عريس مسجل من أصل ${weddingInfo.targetCouples || 24} مستهدف)، ومتابعة الفحوصات الطبية واعتماد عقود القران وتوزيع بطاقات الدعوة.`
-                    : `Manage registered couples (${couples.length} of ${weddingInfo.targetCouples || 24} target), medical test progress, legal contracts, and invitation quotas.`}
-                </p>
-              </div>
-
-              {/* Action Button */}
-              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => { setEditingCouple(null); setShowAddCoupleModal(true); }}
-                  className="flex items-center gap-2 px-5 py-3 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-2xl font-black text-xs sm:text-sm shadow-md transition"
-                >
-                  <Plus size={18} />
-                  <span>{isRtl ? '➕ تسجيل عريس جديد' : 'Register New Couple'}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Quick Stats Strip */}
-            <div className="mt-5 pt-4 border-t border-white/20 flex flex-wrap items-center gap-2.5 text-xs font-bold text-amber-100">
-              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-                💍 <span>{isRtl ? 'إجمالي العرسان:' : 'Total Couples:'}</span>
-                <strong className="text-white font-black">{couples.length} / {weddingInfo.targetCouples || 24}</strong>
-              </span>
-              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-                🩺 <span>{isRtl ? 'مكتمل الفحص الطبي:' : 'Medical Ready:'}</span>
-                <strong className="text-emerald-300 font-black">{couples.filter(c => c.medicalStatus === 'completed').length}</strong>
-              </span>
-              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-                📜 <span>{isRtl ? 'معتمد عقد القران:' : 'Contracts Approved:'}</span>
-                <strong className="text-amber-200 font-black">{couples.filter(c => c.contractStatus === 'completed').length}</strong>
-              </span>
-              <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-                👥 <span>{isRtl ? 'معازيم العرسان المقدرين:' : 'Couples Guests:'}</span>
-                <strong className="text-white font-black">{(logistics.couplesGuests || 0).toLocaleString()}</strong>
-              </span>
-            </div>
-          </div>
-
-          {/* Header Controls */}
-          <div className="bg-white p-4 sm:p-6 rounded-3xl border border-gray-200/80 shadow-sm flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between">
-            <div className="flex flex-1 items-center gap-3">
-              <div className="relative flex-1 max-w-md">
-                <input
-                  type="text"
-                  value={coupleSearch}
-                  onChange={(e) => setCoupleSearch(e.target.value)}
-                  placeholder={isRtl ? 'ابحث باسم العريس، القبيلة، أو المنطقة...' : 'Search couple, tribe, area...'}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 pl-10 text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 transition"
-                />
-                <Search size={16} className={`absolute top-3.5 ${isRtl ? 'left-3' : 'right-3'} text-gray-400`} />
-              </div>
-
-              <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl text-xs font-bold">
-                <button
-                  type="button"
-                  onClick={() => setCoupleFilter('all')}
-                  className={`px-3 py-1.5 rounded-lg transition ${coupleFilter === 'all' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
-                >
-                  {isRtl ? 'الكل' : 'All'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCoupleFilter('ready')}
-                  className={`px-3 py-1.5 rounded-lg transition ${coupleFilter === 'ready' ? 'bg-white shadow-sm text-emerald-700' : 'text-gray-500'}`}
-                >
-                  {isRtl ? 'المكتملون' : 'Verified'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCoupleFilter('pending')}
-                  className={`px-3 py-1.5 rounded-lg transition ${coupleFilter === 'pending' ? 'bg-white shadow-sm text-amber-700' : 'text-gray-500'}`}
-                >
-                  {isRtl ? 'قيد المتابعة' : 'Pending'}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => { setEditingCouple(null); setShowAddCoupleModal(true); }}
-              className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs sm:text-sm shadow-md transition shrink-0"
-            >
-              <Plus size={18} />
-              <span>{isRtl ? 'إضافة عريس للسجل' : 'Register New Couple'}</span>
-            </button>
-          </div>
-
-          {/* Couples Table / Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredCouples.map((c, index) => (
-              <div
-                key={c.id}
-                className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-sm hover:shadow-md transition space-y-3 relative group"
+          {/* Sub-Tab Navigation Switcher */}
+          <div className="flex items-center justify-between bg-white p-2 sm:p-2.5 rounded-3xl border border-gray-200/80 shadow-sm">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setRosterSubTab('grooms')}
+                className={`flex items-center gap-2.5 px-4 sm:px-6 py-2.5 rounded-2xl font-black text-xs sm:text-sm transition ${rosterSubTab === 'grooms'
+                  ? 'bg-gradient-to-r from-amber-600 to-amber-700 text-white shadow-md'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 font-black text-sm flex items-center justify-center shrink-0">
-                      {index + 1}
+                <span>🤵 {isRtl ? 'سجل العرسان' : 'Grooms Roster'}</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${rosterSubTab === 'grooms' ? 'bg-white/25 text-white' : 'bg-gray-200 text-gray-700'
+                  }`}>
+                  {grooms.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRosterSubTab('brides')}
+                className={`flex items-center gap-2.5 px-4 sm:px-6 py-2.5 rounded-2xl font-black text-xs sm:text-sm transition ${rosterSubTab === 'brides'
+                  ? 'bg-gradient-to-r from-rose-600 to-pink-700 text-white shadow-md'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+              >
+                <span>👰 {isRtl ? 'سجل العرائس' : 'Brides Roster'}</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${rosterSubTab === 'brides' ? 'bg-white/25 text-white' : 'bg-gray-200 text-gray-700'
+                  }`}>
+                  {brides.length}
+                </span>
+              </button>
+            </div>
+
+            <div className="hidden sm:flex items-center gap-2 text-xs font-bold text-gray-500">
+              <span className="bg-amber-50 text-amber-800 border border-amber-200/80 px-3 py-1 rounded-xl">
+                💍 {isRtl ? 'إجمالي المشاركين:' : 'Total:'} <strong>{grooms.length + brides.length}</strong>
+              </span>
+            </div>
+          </div>
+
+          {/* --- VIEW 1: GROOMS ROSTER --- */}
+          {rosterSubTab === 'grooms' && (
+            <div className="space-y-6">
+              {/* Grooms Hero Banner */}
+              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-700 via-orange-800 to-amber-900 text-white p-6 sm:p-7 shadow-lg">
+                <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+
+                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="space-y-1.5 max-w-2xl">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20 text-amber-100">
+                      <Users2 size={14} />
+                      <span>{isRtl ? 'سجل العرسان والتوثيق الميداني' : 'Grooms Roster & Verification'}</span>
                     </div>
-                    <div>
-                      <h4 className="font-black text-base text-gray-900">{c.groomName}</h4>
-                      <p className="text-xs text-gray-500">{c.brideName}</p>
-                    </div>
+                    <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+                      <span>{isRtl ? 'سجل العرسان واعتماد العقود والفحوصات' : 'Registered Grooms & Approvals'}</span>
+                    </h3>
+                    <p className="text-xs sm:text-sm text-amber-100/90 leading-relaxed">
+                      {isRtl
+                        ? `إدارة بيانات العرسان المشاركين (${grooms.length} عريس مسجل من أصل ${weddingInfo.targetCouples || 24} مستهدف)، ومتابعة الفحوصات الطبية واعتماد عقود القران والكسوة وتوزيع بطاقات الدعوة.`
+                        : `Manage registered grooms (${grooms.length} of ${weddingInfo.targetCouples || 24} target), medical tests, contracts, grants, and invitation quotas.`}
+                    </p>
                   </div>
 
-                  <div className="flex items-center gap-1 opacity-90 sm:opacity-0 group-hover:opacity-100 transition">
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                     <button
                       type="button"
-                      onClick={() => handleEditCouple(c)}
-                      className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition"
-                      title={isRtl ? 'تعديل بيانات العريس' : 'Edit Couple'}
+                      onClick={() => setShowBulkImportGroomsModal(true)}
+                      className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 bg-white/15 hover:bg-white/25 text-white border border-white/30 rounded-2xl font-bold text-xs sm:text-sm shadow-sm backdrop-blur-sm transition"
                     >
-                      <Edit2 size={16} />
+                      <FileSpreadsheet size={16} className="text-amber-200" />
+                      <span>{isRtl ? '📊 استيراد عرسان من إكسل' : 'Import Grooms'}</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDeleteCouple(c.id)}
-                      className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
-                      title={isRtl ? 'حذف العريس' : 'Delete'}
+                      onClick={() => { setEditingGroom(null); setShowAddGroomModal(true); }}
+                      className="flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-2xl font-black text-xs sm:text-sm shadow-md transition"
                     >
-                      <Trash2 size={16} />
+                      <Plus size={16} />
+                      <span>{isRtl ? '➕ تسجيل عريس جديد' : 'Register Groom'}</span>
                     </button>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
-                  <span className="bg-gray-100 px-2.5 py-1 rounded-lg font-bold">{c.tribe}</span>
-                  <span className="bg-gray-100 px-2.5 py-1 rounded-lg">{c.area}</span>
-                  {c.phone && (
-                    <a
-                      href={`tel:${c.phone}`}
-                      className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 transition"
-                    >
-                      <Phone size={12} />
-                      <span dir="ltr">{c.phone}</span>
-                    </a>
-                  )}
-                  <span className="bg-amber-50 text-amber-800 px-2 py-0.5 rounded-lg text-[11px] font-bold">
-                    {c.guestQuota || 35} {isRtl ? 'بطاقة دعوة' : 'invitations'}
+                {/* Quick Stats Strip */}
+                <div className="mt-5 pt-4 border-t border-white/20 flex flex-wrap items-center gap-2.5 text-xs font-bold text-amber-100">
+                  <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                    🤵 <span>{isRtl ? 'إجمالي العرسان:' : 'Total Grooms:'}</span>
+                    <strong className="text-white font-black">{grooms.length} / {weddingInfo.targetCouples || 24}</strong>
+                  </span>
+                  <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                    🩺 <span>{isRtl ? 'مكتمل الفحص الطبي:' : 'Medical Ready:'}</span>
+                    <strong className="text-emerald-300 font-black">{grooms.filter(g => g.medicalStatus === 'completed').length}</strong>
+                  </span>
+                  <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                    📜 <span>{isRtl ? 'معتمد عقد القران:' : 'Contracts Signed:'}</span>
+                    <strong className="text-amber-200 font-black">{grooms.filter(g => g.contractStatus === 'completed').length}</strong>
+                  </span>
+                  <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                    🎁 <span>{isRtl ? 'استلم الكسوة/المنحة:' : 'Aid Delivered:'}</span>
+                    <strong className="text-purple-300 font-black">{grooms.filter(g => g.aidStatus === 'delivered').length}</strong>
+                  </span>
+                  <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                    👥 <span>{isRtl ? 'معازيم العرسان:' : 'Grooms Guests:'}</span>
+                    <strong className="text-white font-black">{grooms.reduce((s, g) => s + (Number(g.guestQuota) || 35), 0).toLocaleString()}</strong>
                   </span>
                 </div>
+              </div>
 
-                {/* Status Toggles */}
-                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100 text-[11px]">
+              {/* Header Controls */}
+              <div className="bg-white p-4 sm:p-5 rounded-3xl border border-gray-200/80 shadow-sm flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between">
+                <div className="flex flex-1 items-center gap-3">
+                  <div className="relative flex-1 max-w-md">
+                    <input
+                      type="text"
+                      value={groomSearch}
+                      onChange={(e) => setGroomSearch(e.target.value)}
+                      placeholder={isRtl ? 'ابحث باسم العريس، القبيلة، السكن، أو رقم الهاتف...' : 'Search groom, tribe, area, phone...'}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 pl-10 text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 transition"
+                    />
+                    <Search size={16} className={`absolute top-3.5 ${isRtl ? 'left-3' : 'right-3'} text-gray-400`} />
+                  </div>
 
-                  {/* Medical status */}
-                  <button
-                    type="button"
-                    onClick={() => handleToggleCoupleStatus(c.id, 'medicalStatus')}
-                    className={`p-2 rounded-xl text-center font-bold transition flex flex-col items-center gap-1 ${c.medicalStatus === 'completed'
-                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                      : 'bg-amber-50 text-amber-800 border border-amber-200'
-                      }`}
-                  >
-                    <span>{isRtl ? 'الفحص الطبي' : 'Medical Check'}</span>
-                    <span className="text-[10px]">
-                      {c.medicalStatus === 'completed' ? (isRtl ? 'مكتمل ✓' : 'Done ✓') : (isRtl ? 'قيد الإجراء ⏳' : 'Pending')}
-                    </span>
-                  </button>
-
-                  {/* Contract status */}
-                  <button
-                    type="button"
-                    onClick={() => handleToggleCoupleStatus(c.id, 'contractStatus')}
-                    className={`p-2 rounded-xl text-center font-bold transition flex flex-col items-center gap-1 ${c.contractStatus === 'completed'
-                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                      : 'bg-amber-50 text-amber-800 border border-amber-200'
-                      }`}
-                  >
-                    <span>{isRtl ? 'عقد القران' : 'Marriage Contract'}</span>
-                    <span className="text-[10px]">
-                      {c.contractStatus === 'completed' ? (isRtl ? 'موثق ✓' : 'Signed ✓') : (isRtl ? 'مجدول ⏳' : 'Scheduled')}
-                    </span>
-                  </button>
-
-                  {/* Aid / Gifting status */}
-                  <button
-                    type="button"
-                    onClick={() => handleToggleCoupleStatus(c.id, 'aidStatus')}
-                    className={`p-2 rounded-xl text-center font-bold transition flex flex-col items-center gap-1 ${c.aidStatus === 'delivered'
-                      ? 'bg-purple-50 text-purple-800 border border-purple-200'
-                      : 'bg-gray-100 text-gray-700'
-                      }`}
-                  >
-                    <span>{isRtl ? 'الكسوة والمنحة' : 'Groom Aid'}</span>
-                    <span className="text-[10px]">
-                      {c.aidStatus === 'delivered' ? (isRtl ? 'تم التسليم 🎁' : 'Delivered 🎁') : (isRtl ? 'قيد التجهيز' : 'Processing')}
-                    </span>
-                  </button>
-
+                  <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setGroomFilter('all')}
+                      className={`px-3 py-1.5 rounded-lg transition ${groomFilter === 'all' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
+                    >
+                      {isRtl ? 'الكل' : 'All'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGroomFilter('ready')}
+                      className={`px-3 py-1.5 rounded-lg transition ${groomFilter === 'ready' ? 'bg-white shadow-sm text-emerald-700' : 'text-gray-500'}`}
+                    >
+                      {isRtl ? 'المكتملون' : 'Verified'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGroomFilter('pending')}
+                      className={`px-3 py-1.5 rounded-lg transition ${groomFilter === 'pending' ? 'bg-white shadow-sm text-amber-700' : 'text-gray-500'}`}
+                    >
+                      {isRtl ? 'قيد المتابعة' : 'Pending'}
+                    </button>
+                  </div>
                 </div>
 
-                {c.notes && (
-                  <p className="text-[11px] text-gray-500 bg-gray-50 p-2 rounded-xl italic">
-                    {c.notes}
-                  </p>
-                )}
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowBulkImportGroomsModal(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold text-xs sm:text-sm transition"
+                  >
+                    <FileSpreadsheet size={16} className="text-emerald-600" />
+                    <span>{isRtl ? 'استيراد إكسل' : 'Import'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setEditingGroom(null); setShowAddGroomModal(true); }}
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs sm:text-sm shadow-md transition"
+                  >
+                    <Plus size={16} />
+                    <span>{isRtl ? 'إضافة عريس للسجل' : 'Register Groom'}</span>
+                  </button>
+                </div>
               </div>
-            ))}
-          </div>
 
-          {filteredCouples.length === 0 && (
-            <div className="bg-white p-12 rounded-3xl border border-dashed border-gray-300 text-center text-gray-500 space-y-4">
-              <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
-                <Users2 size={32} />
+              {/* Grooms Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredGrooms.map((g, index) => (
+                  <div
+                    key={g.id}
+                    className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-sm hover:shadow-md transition space-y-3 relative group"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 font-black text-sm flex items-center justify-center shrink-0">
+                          {index + 1}
+                        </div>
+                        <div>
+                          <h4 className="font-black text-base text-gray-900">{g.name}</h4>
+                          {g.partnerBrideName ? (
+                            <p className="text-xs text-rose-600 font-bold flex items-center gap-1">
+                              <span>👰 {isRtl ? 'العروس المقترنة:' : 'Bride:'}</span>
+                              <span>{g.partnerBrideName}</span>
+                            </p>
+                          ) : (
+                            <p className="text-xs text-gray-400">{isRtl ? 'لم تقترن عروس بعد' : 'No bride linked yet'}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 opacity-90 sm:opacity-0 group-hover:opacity-100 transition">
+                        <button
+                          type="button"
+                          onClick={() => handleEditGroom(g)}
+                          className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition"
+                          title={isRtl ? 'تعديل بيانات العريس' : 'Edit Groom'}
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteGroom(g.id)}
+                          className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
+                          title={isRtl ? 'حذف العريس' : 'Delete'}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                      {g.tribe && <span className="bg-gray-100 px-2.5 py-1 rounded-lg font-bold">{g.tribe}</span>}
+                      {g.area && <span className="bg-gray-100 px-2.5 py-1 rounded-lg">{g.area}</span>}
+                      {g.nationalId && (
+                        <span className="bg-gray-100 px-2 py-0.5 rounded-lg text-[11px] font-mono text-gray-500">
+                          🪪 {g.nationalId}
+                        </span>
+                      )}
+                      {g.phone && (
+                        <a
+                          href={`tel:${g.phone}`}
+                          className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 transition"
+                        >
+                          <Phone size={12} />
+                          <span dir="ltr">{g.phone}</span>
+                        </a>
+                      )}
+                      <span className="bg-amber-50 text-amber-800 px-2 py-0.5 rounded-lg text-[11px] font-bold">
+                        👥 {g.guestQuota || 35} {isRtl ? 'بطاقة دعوة' : 'invitations'}
+                      </span>
+                    </div>
+
+                    {/* Status Toggles */}
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100 text-[11px]">
+                      {/* Medical Status */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleGroomStatus(g.id, 'medicalStatus')}
+                        className={`p-2 rounded-xl text-center font-bold transition flex flex-col items-center gap-1 ${g.medicalStatus === 'completed'
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : 'bg-amber-50 text-amber-800 border border-amber-200'
+                          }`}
+                      >
+                        <span>{isRtl ? 'الفحص الطبي' : 'Medical Check'}</span>
+                        <span className="text-[10px]">
+                          {g.medicalStatus === 'completed' ? (isRtl ? 'مكتمل ✓' : 'Done ✓') : (isRtl ? 'قيد الإجراء ⏳' : 'Pending')}
+                        </span>
+                      </button>
+
+                      {/* Contract Status */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleGroomStatus(g.id, 'contractStatus')}
+                        className={`p-2 rounded-xl text-center font-bold transition flex flex-col items-center gap-1 ${g.contractStatus === 'completed'
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : 'bg-amber-50 text-amber-800 border border-amber-200'
+                          }`}
+                      >
+                        <span>{isRtl ? 'عقد القران' : 'Marriage Contract'}</span>
+                        <span className="text-[10px]">
+                          {g.contractStatus === 'completed' ? (isRtl ? 'موثق ✓' : 'Signed ✓') : (isRtl ? 'مجدول ⏳' : 'Scheduled')}
+                        </span>
+                      </button>
+
+                      {/* Aid Status */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleGroomStatus(g.id, 'aidStatus')}
+                        className={`p-2 rounded-xl text-center font-bold transition flex flex-col items-center gap-1 ${g.aidStatus === 'delivered'
+                          ? 'bg-purple-50 text-purple-800 border border-purple-200'
+                          : 'bg-gray-100 text-gray-700'
+                          }`}
+                      >
+                        <span>{isRtl ? 'الكسوة والمنحة' : 'Groom Aid'}</span>
+                        <span className="text-[10px]">
+                          {g.aidStatus === 'delivered' ? (isRtl ? 'تم التسليم 🎁' : 'Delivered 🎁') : (isRtl ? 'قيد التجهيز' : 'Processing')}
+                        </span>
+                      </button>
+                    </div>
+
+                    {g.notes && (
+                      <p className="text-[11px] text-gray-500 bg-gray-50 p-2 rounded-xl italic">
+                        {g.notes}
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
-              <div className="space-y-1">
-                <h4 className="font-bold text-gray-800 text-base">
-                  {couples.length === 0
-                    ? (isRtl ? 'لم يتم تسجيل أي عرسان بعد في السجل' : 'No couples registered yet')
-                    : (isRtl ? 'لم يتم العثور على عرسان مطابقين للبحث' : 'No couples matched your search')}
-                </h4>
-                <p className="text-xs text-gray-400 max-w-sm mx-auto">
-                  {couples.length === 0
-                    ? (isRtl ? 'ابدأ بإضافة العرسان ومتابعة فحوصاتهم الطبية وعقودهم الشرعية وكوتة بطاقات الدعوة.' : 'Start adding couples to track their medical checks, contracts, and invitation quotas.')
-                    : (isRtl ? 'جرب البحث بكلمات أخرى أو أعد ضبط تصنيف التصفية.' : 'Try different search keywords or reset filter.')}
-                </p>
+
+              {filteredGrooms.length === 0 && (
+                <div className="bg-white p-12 rounded-3xl border border-dashed border-gray-300 text-center text-gray-500 space-y-4">
+                  <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+                    <Users2 size={32} />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-gray-800 text-base">
+                      {grooms.length === 0
+                        ? (isRtl ? 'لم يتم تسجيل أي عرسان بعد في السجل' : 'No grooms registered yet')
+                        : (isRtl ? 'لم يتم العثور على عرسان مطابقين للبحث' : 'No grooms matched your search')}
+                    </h4>
+                    <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                      {grooms.length === 0
+                        ? (isRtl ? 'ابدأ بإضافة العرسان يدوياً أو استيراد كشف كامل من ملف إكسل مباشرة.' : 'Start adding grooms manually or import a full list from Excel.')
+                        : (isRtl ? 'جرب البحث بكلمات أخرى أو أعد ضبط تصنيف التصفية.' : 'Try different search keywords or reset filter.')}
+                    </p>
+                  </div>
+                  {grooms.length === 0 && (
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowBulkImportGroomsModal(true)}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold text-xs sm:text-sm transition"
+                      >
+                        <FileSpreadsheet size={16} className="text-emerald-600" />
+                        <span>{isRtl ? 'استيراد من إكسل' : 'Import Excel'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setEditingGroom(null); setShowAddGroomModal(true); }}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs sm:text-sm shadow-md transition"
+                      >
+                        <Plus size={16} />
+                        <span>{isRtl ? 'تسجيل أول عريس في السجل' : 'Register First Groom'}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* --- VIEW 2: BRIDES ROSTER --- */}
+          {rosterSubTab === 'brides' && (
+            <div className="space-y-6">
+              {/* Brides Hero Banner */}
+              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-rose-700 via-pink-800 to-rose-950 text-white p-6 sm:p-7 shadow-lg">
+                <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+
+                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="space-y-1.5 max-w-2xl">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20 text-rose-100">
+                      <Users2 size={14} />
+                      <span>{isRtl ? 'سجل العرائس وشؤون صالة النساء' : 'Brides Roster & Women Hall Coordination'}</span>
+                    </div>
+                    <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+                      <span>{isRtl ? 'سجل العرائس وأولياء الأمور والتوثيق' : 'Registered Brides & Guardians'}</span>
+                    </h3>
+                    <p className="text-xs sm:text-sm text-rose-100/90 leading-relaxed">
+                      {isRtl
+                        ? `إدارة بيانات العرائس المشاركات (${brides.length} عروس مسجلة)، وأولياء أمورهن، والفحوصات الطبية، وكوتة صالة النساء والتنسيق الميداني المستقل.`
+                        : `Manage registered brides (${brides.length} brides), guardians, medical checks, women hall invitation quotas, and coordination.`}
+                    </p>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowBulkImportBridesModal(true)}
+                      className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 bg-white/15 hover:bg-white/25 text-white border border-white/30 rounded-2xl font-bold text-xs sm:text-sm shadow-sm backdrop-blur-sm transition"
+                    >
+                      <FileSpreadsheet size={16} className="text-rose-200" />
+                      <span>{isRtl ? '📊 استيراد عرائس من إكسل' : 'Import Brides'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setEditingBride(null); setShowAddBrideModal(true); }}
+                      className="flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-rose-400 hover:bg-rose-300 text-rose-950 rounded-2xl font-black text-xs sm:text-sm shadow-md transition"
+                    >
+                      <Plus size={16} />
+                      <span>{isRtl ? '➕ تسجيل عروس جديدة' : 'Register Bride'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Stats Strip */}
+                <div className="mt-5 pt-4 border-t border-white/20 flex flex-wrap items-center gap-2.5 text-xs font-bold text-rose-100">
+                  <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                    👰 <span>{isRtl ? 'إجمالي العرائس:' : 'Total Brides:'}</span>
+                    <strong className="text-white font-black">{brides.length} / {weddingInfo.targetCouples || 24}</strong>
+                  </span>
+                  <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                    🩺 <span>{isRtl ? 'مكتمل الفحص الطبي:' : 'Medical Ready:'}</span>
+                    <strong className="text-emerald-300 font-black">{brides.filter(b => b.medicalStatus === 'completed').length}</strong>
+                  </span>
+                  <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                    📜 <span>{isRtl ? 'معتمد عقد القران:' : 'Contracts Signed:'}</span>
+                    <strong className="text-amber-200 font-black">{brides.filter(b => b.contractStatus === 'completed').length}</strong>
+                  </span>
+                  <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                    👨‍👧 <span>{isRtl ? 'أولياء أمور موثقين:' : 'Guardians:'}</span>
+                    <strong className="text-white font-black">{brides.filter(b => b.guardianName).length}</strong>
+                  </span>
+                  <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                    🌸 <span>{isRtl ? 'كوتة صالة النساء:' : 'Women Hall Guests:'}</span>
+                    <strong className="text-white font-black">{brides.reduce((s, b) => s + (Number(b.guestQuota) || 25), 0).toLocaleString()}</strong>
+                  </span>
+                </div>
               </div>
-              {couples.length === 0 && (
-                <button
-                  type="button"
-                  onClick={() => { setEditingCouple(null); setShowAddCoupleModal(true); }}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs sm:text-sm shadow-md transition"
-                >
-                  <Plus size={16} />
-                  <span>{isRtl ? 'تسجيل أول عريس في السجل' : 'Register First Couple'}</span>
-                </button>
+
+              {/* Header Controls */}
+              <div className="bg-white p-4 sm:p-5 rounded-3xl border border-gray-200/80 shadow-sm flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between">
+                <div className="flex flex-1 items-center gap-3">
+                  <div className="relative flex-1 max-w-md">
+                    <input
+                      type="text"
+                      value={brideSearch}
+                      onChange={(e) => setBrideSearch(e.target.value)}
+                      placeholder={isRtl ? 'ابحث باسم العروس، اسم ولي الأمر، القبيلة، السكن...' : 'Search bride, guardian, tribe, area...'}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 pl-10 text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500 transition"
+                    />
+                    <Search size={16} className={`absolute top-3.5 ${isRtl ? 'left-3' : 'right-3'} text-gray-400`} />
+                  </div>
+
+                  <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setBrideFilter('all')}
+                      className={`px-3 py-1.5 rounded-lg transition ${brideFilter === 'all' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
+                    >
+                      {isRtl ? 'الكل' : 'All'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBrideFilter('ready')}
+                      className={`px-3 py-1.5 rounded-lg transition ${brideFilter === 'ready' ? 'bg-white shadow-sm text-emerald-700' : 'text-gray-500'}`}
+                    >
+                      {isRtl ? 'المكتملات' : 'Verified'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBrideFilter('pending')}
+                      className={`px-3 py-1.5 rounded-lg transition ${brideFilter === 'pending' ? 'bg-white shadow-sm text-rose-700' : 'text-gray-500'}`}
+                    >
+                      {isRtl ? 'قيد المتابعة' : 'Pending'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowBulkImportBridesModal(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold text-xs sm:text-sm transition"
+                  >
+                    <FileSpreadsheet size={16} className="text-emerald-600" />
+                    <span>{isRtl ? 'استيراد إكسل' : 'Import'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setEditingBride(null); setShowAddBrideModal(true); }}
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs sm:text-sm shadow-md transition"
+                  >
+                    <Plus size={16} />
+                    <span>{isRtl ? 'إضافة عروس للسجل' : 'Register Bride'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Brides Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredBrides.map((b, index) => (
+                  <div
+                    key={b.id}
+                    className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-sm hover:shadow-md transition space-y-3 relative group"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-800 font-black text-sm flex items-center justify-center shrink-0">
+                          {index + 1}
+                        </div>
+                        <div>
+                          <h4 className="font-black text-base text-gray-900">{b.name}</h4>
+                          {b.partnerGroomName ? (
+                            <p className="text-xs text-amber-700 font-bold flex items-center gap-1">
+                              <span>🤵 {isRtl ? 'العريس المقترن:' : 'Groom:'}</span>
+                              <span>{b.partnerGroomName}</span>
+                            </p>
+                          ) : (
+                            <p className="text-xs text-gray-400">{isRtl ? 'لم يقترن عريس بعد' : 'No groom linked yet'}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 opacity-90 sm:opacity-0 group-hover:opacity-100 transition">
+                        <button
+                          type="button"
+                          onClick={() => handleEditBride(b)}
+                          className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
+                          title={isRtl ? 'تعديل بيانات العروس' : 'Edit Bride'}
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteBride(b.id)}
+                          className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
+                          title={isRtl ? 'حذف العروس' : 'Delete'}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Guardian Box */}
+                    {b.guardianName && (
+                      <div className="p-2.5 rounded-2xl bg-rose-50/70 border border-rose-100 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-rose-900">
+                            👨‍👧 {isRtl ? 'ولي الأمر:' : 'Guardian:'} {b.guardianName}
+                          </span>
+                          {b.guardianRelation && (
+                            <span className="bg-rose-200/70 text-rose-800 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                              {b.guardianRelation}
+                            </span>
+                          )}
+                        </div>
+                        {b.guardianPhone && (
+                          <a
+                            href={`tel:${b.guardianPhone}`}
+                            className="bg-white text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 hover:bg-emerald-50 transition"
+                          >
+                            <Phone size={11} />
+                            <span dir="ltr">{b.guardianPhone}</span>
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                      {b.tribe && <span className="bg-gray-100 px-2.5 py-1 rounded-lg font-bold">{b.tribe}</span>}
+                      {b.area && <span className="bg-gray-100 px-2.5 py-1 rounded-lg">{b.area}</span>}
+                      {b.nationalId && (
+                        <span className="bg-gray-100 px-2 py-0.5 rounded-lg text-[11px] font-mono text-gray-500">
+                          🪪 {b.nationalId}
+                        </span>
+                      )}
+                      {b.phone && (
+                        <a
+                          href={`tel:${b.phone}`}
+                          className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 transition"
+                        >
+                          <Phone size={12} />
+                          <span dir="ltr">{b.phone}</span>
+                        </a>
+                      )}
+                      <span className="bg-rose-50 text-rose-800 px-2 py-0.5 rounded-lg text-[11px] font-bold">
+                        🌸 {b.guestQuota || 25} {isRtl ? 'كوتة صالة النساء' : 'hall guests'}
+                      </span>
+                    </div>
+
+                    {/* Status Toggles */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100 text-[11px]">
+                      {/* Medical Status */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleBrideStatus(b.id, 'medicalStatus')}
+                        className={`p-2 rounded-xl text-center font-bold transition flex flex-col items-center gap-1 ${b.medicalStatus === 'completed'
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : 'bg-rose-50 text-rose-800 border border-rose-200'
+                          }`}
+                      >
+                        <span>{isRtl ? 'الفحص الطبي' : 'Medical Check'}</span>
+                        <span className="text-[10px]">
+                          {b.medicalStatus === 'completed' ? (isRtl ? 'مكتمل ✓' : 'Done ✓') : (isRtl ? 'قيد الإجراء ⏳' : 'Pending')}
+                        </span>
+                      </button>
+
+                      {/* Contract Status */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleBrideStatus(b.id, 'contractStatus')}
+                        className={`p-2 rounded-xl text-center font-bold transition flex flex-col items-center gap-1 ${b.contractStatus === 'completed'
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : 'bg-amber-50 text-amber-800 border border-amber-200'
+                          }`}
+                      >
+                        <span>{isRtl ? 'عقد القران' : 'Marriage Contract'}</span>
+                        <span className="text-[10px]">
+                          {b.contractStatus === 'completed' ? (isRtl ? 'موثق ✓' : 'Signed ✓') : (isRtl ? 'مجدول ⏳' : 'Scheduled')}
+                        </span>
+                      </button>
+                    </div>
+
+                    {b.notes && (
+                      <p className="text-[11px] text-gray-500 bg-gray-50 p-2 rounded-xl italic">
+                        {b.notes}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {filteredBrides.length === 0 && (
+                <div className="bg-white p-12 rounded-3xl border border-dashed border-gray-300 text-center text-gray-500 space-y-4">
+                  <div className="w-16 h-16 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+                    <Users2 size={32} />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-gray-800 text-base">
+                      {brides.length === 0
+                        ? (isRtl ? 'لم يتم تسجيل أي عرائس بعد في السجل' : 'No brides registered yet')
+                        : (isRtl ? 'لم يتم العثور على عرائس مطابقات للبحث' : 'No brides matched your search')}
+                    </h4>
+                    <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                      {brides.length === 0
+                        ? (isRtl ? 'ابدأي أو ابدأ بإضافة العرائس وأولياء أمورهن أو استيراد كشف كامل من ملف إكسل مباشرة.' : 'Start adding brides and guardians or import a list from Excel.')
+                        : (isRtl ? 'جرب البحث بكلمات أخرى أو أعد ضبط تصنيف التصفية.' : 'Try different search keywords or reset filter.')}
+                    </p>
+                  </div>
+                  {brides.length === 0 && (
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowBulkImportBridesModal(true)}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold text-xs sm:text-sm transition"
+                      >
+                        <FileSpreadsheet size={16} className="text-emerald-600" />
+                        <span>{isRtl ? 'استيراد من إكسل' : 'Import Excel'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setEditingBride(null); setShowAddBrideModal(true); }}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs sm:text-sm shadow-md transition"
+                      >
+                        <Plus size={16} />
+                        <span>{isRtl ? 'تسجيل أول عروس في السجل' : 'Register First Bride'}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -1313,126 +2323,138 @@ export default function MassWeddingDashboard({
 
       {/* === SUB-TAB 3: COMMITTEES & TEAMS === */}
       {activeSubTab === 'committees' && (() => {
-        const activeCommittee = committees.find((c) => c.id === selectedCommitteeId);
-
         // --- VIEW 1: DEDICATED COMMITTEE DETAIL PAGE ---
         if (selectedCommitteeId && activeCommittee) {
-          const comTasks = (activeCommittee.tasks && activeCommittee.tasks.length > 0)
-            ? activeCommittee.tasks
-            : (activeCommittee.responsibilities || []).map((r, i) => ({ id: `task-${i}`, text: r, completed: false }));
-          const completedTasksCount = comTasks.filter((t) => t.completed).length;
-          const taskCompletionPct = comTasks.length > 0 ? Math.round((completedTasksCount / comTasks.length) * 100) : 0;
-          const comMembers = activeCommittee.members || [];
-          const filteredMembers = comMembers.filter((m) => {
-            if (!memberSearchQuery.trim()) return true;
-            const q = memberSearchQuery.toLowerCase();
-            return (
-              (m.name && m.name.toLowerCase().includes(q)) ||
-              (m.phone && m.phone.toLowerCase().includes(q)) ||
-              (m.role && m.role.toLowerCase().includes(q))
-            );
-          });
-
           return (
             <div className="space-y-6">
 
               {/* Breadcrumb Navigation & Back Button */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs">
+              <div className="flex items-center justify-between gap-3 bg-white px-4 py-3 rounded-2xl border border-gray-200/80 shadow-xs">
                 <button
                   type="button"
                   onClick={() => setSelectedCommitteeId(null)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 font-black text-xs transition border border-amber-200/60 w-fit"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 font-black text-xs transition border border-amber-200/60 shrink-0"
                 >
-                  <ArrowRight size={16} className="rtl:rotate-0 ltr:rotate-180" />
-                  <span>{isRtl ? '← العودة لكافة اللجان التنظيمية' : 'Back to All Committees'}</span>
+                  <ArrowRight size={15} className="rtl:rotate-0 ltr:rotate-180" />
+                  <span>{isRtl ? 'العودة لكافة اللجان التنظيمية' : 'Back to All Committees'}</span>
                 </button>
 
-                <div className="text-xs font-bold text-gray-500 flex items-center gap-2">
+                <div className="text-xs font-bold text-gray-500 flex items-center gap-2 truncate">
                   <span>{isRtl ? 'اللجان الميدانية' : 'Committees'}</span>
-                  <span>/</span>
-                  <span className="text-amber-800 font-black">{activeCommittee.name}</span>
+                  <span className="text-gray-300">/</span>
+                  <span className="text-amber-800 font-black truncate">{activeCommittee.name}</span>
                 </div>
               </div>
 
               {/* Committee Dedicated Hero Banner */}
-              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 text-white p-6 sm:p-7 shadow-lg">
+              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 text-white p-5 sm:p-7 shadow-lg">
                 <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
 
-                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                  <div className="space-y-2 max-w-2xl">
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20 text-blue-100">
-                      <HeartHandshake size={14} />
+                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                  {/* Left (in RTL right): Title, badges, and lead info */}
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-xs font-bold border border-white/20 text-blue-100">
+                      <HeartHandshake size={14} className="text-amber-300" />
                       <span>{isRtl ? 'الصفحة التفصيلية للجنة الميدانية' : 'Committee Detail Workspace'}</span>
                     </div>
 
-                    <h2 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
-                      <span>{activeCommittee.name}</span>
-                    </h2>
-                    {activeCommittee.nameEn && (
-                      <p className="text-xs text-blue-200 font-medium">{activeCommittee.nameEn}</p>
-                    )}
+                    <div className="flex flex-wrap items-baseline gap-2.5">
+                      <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                        {activeCommittee.name}
+                      </h2>
+                      {activeCommittee.nameEn && (
+                        <span className="text-xs text-blue-200 font-medium">({activeCommittee.nameEn})</span>
+                      )}
+                    </div>
 
-                    <div className="flex flex-wrap items-center gap-3 pt-2 text-xs">
-                      <div className="bg-white/15 px-3.5 py-1.5 rounded-xl border border-white/10 flex items-center gap-2">
+                    {/* Lead & Contact Details Strip */}
+                    <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+                      <div className="bg-white/15 px-3 py-1.5 rounded-xl border border-white/10 flex items-center gap-1.5">
                         <span className="text-blue-200">{isRtl ? 'المشرف المسؤول:' : 'Lead:'}</span>
-                        <strong className="text-white font-black">{activeCommittee.leader}</strong>
+                        <strong className="text-white font-black">{activeCommittee.leader || (isRtl ? 'لم يعيّن بعد' : 'Unassigned')}</strong>
                       </div>
 
                       {activeCommittee.phone && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <a
                             href={`tel:${activeCommittee.phone}`}
-                            className="bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-100 px-3 py-1.5 rounded-xl border border-emerald-400/30 font-bold flex items-center gap-1.5 transition"
+                            className="bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-100 px-2.5 py-1.5 rounded-xl border border-emerald-400/30 font-bold flex items-center gap-1 transition"
                           >
-                            <Phone size={13} />
+                            <Phone size={12} />
                             <span dir="ltr">{activeCommittee.phone}</span>
                           </a>
                           <a
                             href={`https://wa.me/${activeCommittee.phone.replace(/[^0-9]/g, '')}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition shadow-sm"
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1.5 rounded-xl font-bold flex items-center gap-1 transition shadow-sm"
                           >
-                            <Share2 size={13} />
+                            <Share2 size={12} />
                             <span>واتساب</span>
                           </a>
                         </div>
                       )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleEditCommittee(activeCommittee)}
+                        className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-blue-100 rounded-xl transition flex items-center gap-1 text-[11px] font-bold border border-white/10"
+                        title={isRtl ? 'تعديل بيانات اللجنة' : 'Edit Committee'}
+                      >
+                        <Edit2 size={12} />
+                        <span>{isRtl ? 'تعديل البيانات' : 'Edit'}</span>
+                      </button>
                     </div>
                   </div>
 
-                  {/* Actions Strip in Hero */}
-                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  {/* Right (in RTL left): Compact, well-organized action toolbar */}
+                  <div className="flex flex-wrap items-center justify-start lg:justify-end gap-1.5 shrink-0 max-w-md">
+                    {/* Primary Action: Add Member */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingMember(null);
+                        setShowAddMemberModal(true);
+                      }}
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-xl font-black text-xs transition shadow-md whitespace-nowrap"
+                    >
+                      <UserPlus size={14} />
+                      <span>{isRtl ? '➕ إضافة عضو' : 'Add Member'}</span>
+                    </button>
+
+                    {/* QR Code & Portal */}
                     <button
                       type="button"
                       onClick={() => handleOpenQrModal(activeCommittee)}
-                      className="flex items-center gap-2 px-3.5 py-2.5 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-xl font-black text-xs transition shadow-sm"
+                      className="flex items-center gap-1.5 px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/25 transition shadow-sm whitespace-nowrap"
                       title={isRtl ? 'توليد وعرض رمز QR لبوابة اللجنة' : 'Generate QR Code'}
                     >
-                      <QrIcon size={15} />
+                      <QrIcon size={14} />
                       <span>{isRtl ? '🏁 رمز QR والبوابة' : 'QR & Portal'}</span>
                     </button>
 
+                    {/* Mobile Preview */}
                     <button
                       type="button"
                       onClick={() => setPortalPreviewCommittee(activeCommittee)}
-                      className="flex items-center gap-2 px-3.5 py-2.5 bg-white/20 hover:bg-white/30 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/25 transition shadow-sm"
+                      className="flex items-center gap-1.5 px-2.5 py-2 bg-white/15 hover:bg-white/25 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/20 transition shadow-sm whitespace-nowrap"
                       title={isRtl ? 'معاينة شكل البوابة في هاتف العضو' : 'Mobile Preview'}
                     >
-                      <Eye size={15} />
-                      <span>{isRtl ? '📱 معاينة الجوال' : 'Mobile View'}</span>
+                      <Eye size={14} />
+                      <span>{isRtl ? '📱 معاينة' : 'Mobile'}</span>
                     </button>
 
+                    {/* Copy Link */}
                     <button
                       type="button"
                       onClick={() => handleCopyCommitteePortal(activeCommittee)}
-                      className="flex items-center gap-2 px-3.5 py-2.5 bg-white/15 hover:bg-white/25 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/20 transition shadow-sm"
+                      className="flex items-center gap-1.5 px-2.5 py-2 bg-white/15 hover:bg-white/25 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/20 transition shadow-sm whitespace-nowrap"
                       title={isRtl ? 'نسخ رابط البوابة الميدانية المباشر' : 'Copy Portal Link'}
                     >
                       {copiedPortalFor === activeCommittee.id ? (
-                        <Check size={15} className="text-emerald-300" />
+                        <Check size={14} className="text-emerald-300" />
                       ) : (
-                        <Copy size={15} />
+                        <Copy size={14} />
                       )}
                       <span>
                         {copiedPortalFor === activeCommittee.id
@@ -1441,6 +2463,7 @@ export default function MassWeddingDashboard({
                       </span>
                     </button>
 
+                    {/* WhatsApp Lead Quick Share (if phone exists) */}
                     {activeCommittee.phone && (() => {
                       const portalUrl = generateCommitteePortalUrl(activeCommittee, weddingInfo);
                       const cleanP = activeCommittee.phone.replace(/[^0-9]/g, '');
@@ -1452,24 +2475,26 @@ export default function MassWeddingDashboard({
                           href={`https://wa.me/${cleanP}?text=${msg}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-2 px-3.5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-xs transition shadow-sm"
+                          className="flex items-center gap-1.5 px-2.5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-xs transition shadow-sm whitespace-nowrap"
                           title={isRtl ? 'إرسال الرابط للمشرف مباشرة عبر واتساب' : 'Send via WhatsApp'}
                         >
-                          <Share2 size={15} />
-                          <span>{isRtl ? '💬 إرسال للمشرف' : 'Send to Lead'}</span>
+                          <Share2 size={14} />
+                          <span>{isRtl ? '💬 للمشرف' : 'To Lead'}</span>
                         </a>
                       );
                     })()}
 
+                    {/* Export PDF */}
                     <button
                       type="button"
                       onClick={() => setShowPdfReportModal(true)}
-                      className="flex items-center gap-2 px-3.5 py-2.5 bg-white/15 hover:bg-white/25 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/20 transition shadow-sm"
+                      className="flex items-center gap-1.5 px-2.5 py-2 bg-white/15 hover:bg-white/25 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/20 transition shadow-sm whitespace-nowrap"
                     >
-                      <Printer size={15} />
-                      <span>{isRtl ? '📄 تقرير PDF' : 'Export PDF'}</span>
+                      <Printer size={14} />
+                      <span>{isRtl ? '📄 تقرير PDF' : 'PDF'}</span>
                     </button>
 
+                    {/* Import Members Excel */}
                     <button
                       type="button"
                       onClick={() => {
@@ -1478,37 +2503,16 @@ export default function MassWeddingDashboard({
                         setExcelFileName('');
                         setShowImportExcelModal(true);
                       }}
-                      className="flex items-center gap-2 px-3.5 py-2.5 bg-emerald-500/80 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs transition border border-emerald-400/40 shadow-sm"
+                      className="flex items-center gap-1.5 px-2.5 py-2 bg-emerald-600/90 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs transition border border-emerald-400/40 shadow-sm whitespace-nowrap"
                     >
-                      <FileSpreadsheet size={15} />
+                      <FileSpreadsheet size={14} />
                       <span>{isRtl ? '📊 إكسل' : 'Excel'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingMember(null);
-                        setShowAddMemberModal(true);
-                      }}
-                      className="flex items-center gap-2 px-3.5 py-2.5 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-xl font-black text-xs transition shadow-sm"
-                    >
-                      <UserPlus size={15} />
-                      <span>{isRtl ? '➕ عضو' : 'Member'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleEditCommittee(activeCommittee)}
-                      className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition"
-                      title={isRtl ? 'تعديل بيانات اللجنة' : 'Edit Committee'}
-                    >
-                      <Edit2 size={16} />
                     </button>
                   </div>
                 </div>
 
                 {/* KPI Strip */}
-                <div className="mt-6 pt-4 border-t border-white/20 flex flex-wrap items-center gap-2.5 text-xs font-bold text-blue-100">
+                <div className="mt-5 pt-3.5 border-t border-white/15 flex flex-wrap items-center gap-2 text-xs font-bold text-blue-100">
                   <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
                     👥 <span>{isRtl ? 'الأعضاء المسجلين بالاسم:' : 'Registered Members:'}</span>
                     <strong className="text-amber-300 font-black">{comMembers.length}</strong>
@@ -1763,9 +2767,8 @@ export default function MassWeddingDashboard({
                         return (
                           <div
                             key={taskId}
-                            className={`p-3 rounded-2xl border transition flex items-start justify-between gap-3 text-xs ${
-                              isDone ? 'bg-emerald-50/40 border-emerald-200' : 'bg-gray-50/80 border-gray-200 hover:bg-white'
-                            }`}
+                            className={`p-3 rounded-2xl border transition flex items-start justify-between gap-3 text-xs ${isDone ? 'bg-emerald-50/40 border-emerald-200' : 'bg-gray-50/80 border-gray-200 hover:bg-white'
+                              }`}
                           >
                             <label className="flex items-start gap-2.5 cursor-pointer flex-1 select-none">
                               <input
@@ -1809,11 +2812,10 @@ export default function MassWeddingDashboard({
               <button
                 type="button"
                 onClick={() => setCommitteesSectionView('list')}
-                className={`flex-1 py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition ${
-                  committeesSectionView === 'list'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
+                className={`flex-1 py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition ${committeesSectionView === 'list'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-100'
+                  }`}
               >
                 <HeartHandshake size={16} />
                 <span>{isRtl ? `إدارة اللجان والفرق (${committees.length})` : `Committees Management (${committees.length})`}</span>
@@ -1822,11 +2824,10 @@ export default function MassWeddingDashboard({
               <button
                 type="button"
                 onClick={() => setCommitteesSectionView('broadcast')}
-                className={`flex-1 py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition ${
-                  committeesSectionView === 'broadcast'
-                    ? 'bg-emerald-700 text-white shadow-sm'
-                    : 'text-emerald-900 bg-emerald-50/70 hover:bg-emerald-100/70'
-                }`}
+                className={`flex-1 py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition ${committeesSectionView === 'broadcast'
+                  ? 'bg-emerald-700 text-white shadow-sm'
+                  : 'text-emerald-900 bg-emerald-50/70 hover:bg-emerald-100/70'
+                  }`}
               >
                 <Radio size={16} className={committeesSectionView === 'broadcast' ? 'animate-pulse' : ''} />
                 <span>{isRtl ? '📡 مركز البث والتوجيهات الميدانية (Command Hub)' : 'Field Broadcast Hub'}</span>
@@ -1845,226 +2846,281 @@ export default function MassWeddingDashboard({
             ) : (
               <div className="space-y-4">
 
-            {/* Committees Specialized Hero Banner */}
-            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 text-white p-6 sm:p-7 shadow-lg">
-              <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+                {/* Committees Specialized Hero Banner */}
+                <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 text-white p-5 sm:p-7 shadow-lg">
+                  <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
 
-              <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                <div className="space-y-1.5 max-w-2xl">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20 text-blue-100">
-                    <HeartHandshake size={14} />
-                    <span>{isRtl ? 'اللجان التنظيمية والفرق الميدانية' : 'Field Committees & Teams'}</span>
-                  </div>
-                  <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-                    <span>{isRtl ? 'إدارة اللجان والفرق الميدانية والمتطوعين' : 'Committees, Leads & Volunteers'}</span>
-                  </h3>
-                  <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed">
-                    {isRtl
-                      ? `توزيع المهام والمسؤولين والفرق الميدانية (${committees.length} لجان، و ${totalVolunteers} متطوع ميداني) لتنظيم استقبال الضيوف، إعداد الوليمة والشاهي، وتأمين ساحات الحفل. انقر على أي لجنة للدخول إلى صفحتها التفصيلية لإدارة الأعضاء وتصدير التقارير.`
-                      : `Organize field teams (${committees.length} committees, ${totalVolunteers} volunteers) to supervise guest reception, feast logistics, and venue order. Click any committee to manage details.`}
-                  </p>
-                </div>
-
-                {/* Action Button */}
-                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingCommittee(null);
-                      setFormDynamicTasks(['', '']);
-                      setShowAddCommitteeModal(true);
-                    }}
-                    className="flex items-center gap-2 px-5 py-3 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-2xl font-black text-xs sm:text-sm shadow-md transition"
-                  >
-                    <Plus size={18} />
-                    <span>{isRtl ? '➕ إضافة لجنة تنظيمية' : 'Add Committee'}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Quick Stats Strip */}
-              <div className="mt-5 pt-4 border-t border-white/20 flex flex-wrap items-center gap-2.5 text-xs font-bold text-blue-100">
-                <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-                  👥 <span>{isRtl ? 'إجمالي اللجان:' : 'Total Committees:'}</span>
-                  <strong className="text-white font-black">{committees.length}</strong>
-                </span>
-                <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-                  🤝 <span>{isRtl ? 'المتطوعين الميدانيين:' : 'Volunteers:'}</span>
-                  <strong className="text-amber-300 font-black">{totalVolunteers}</strong>
-                </span>
-                <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
-                  📋 <span>{isRtl ? 'مشرفي اللجان المعينين:' : 'Assigned Leads:'}</span>
-                  <strong className="text-white font-black">{committees.filter((c) => c.leader).length}</strong>
-                </span>
-              </div>
-            </div>
-
-            {committees.length === 0 ? (
-              <div className="bg-white p-12 rounded-3xl border border-dashed border-gray-300 text-center text-gray-500 space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
-                  <HeartHandshake size={32} />
-                </div>
-                <div className="space-y-1">
-                  <h4 className="font-bold text-gray-800 text-base">
-                    {isRtl ? 'لا توجد لجان ميدانية مسجلة حتى الآن' : 'No committees registered yet'}
-                  </h4>
-                  <p className="text-xs text-gray-400 max-w-sm mx-auto">
-                    {isRtl
-                      ? 'أنشئ فرق العمل (كاللجنة الإعلامية، لجنة الضيافة والوليمة، ولجنة الاستقبال) لتوزيع المتطوعين والمهام.'
-                      : 'Create working teams to assign responsibilities, leads, and volunteers.'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingCommittee(null);
-                    setFormDynamicTasks(['', '']);
-                    setShowAddCommitteeModal(true);
-                  }}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs sm:text-sm shadow-md transition"
-                >
-                  <Plus size={16} />
-                  <span>{isRtl ? 'إضافة أول لجنة تنظيمية' : 'Add First Committee'}</span>
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {committees.map((com) => {
-                  const comMembersCount = (com.members || []).length;
-                  const comTasks = (com.tasks && com.tasks.length > 0)
-                    ? com.tasks
-                    : (com.responsibilities || []).map((r, i) => ({ id: `task-${i}`, text: r, completed: false }));
-                  const comCompletedTasks = comTasks.filter((t) => t.completed).length;
-
-                  return (
-                    <div
-                      key={com.id}
-                      onClick={() => setSelectedCommitteeId(com.id)}
-                      className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-sm hover:shadow-md hover:border-blue-400 transition space-y-4 relative group cursor-pointer"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <h4 className="font-black text-base text-gray-900 group-hover:text-blue-700 transition">
-                            {com.name}
-                          </h4>
-                          <p className="text-xs text-gray-500">{com.nameEn}</p>
-                        </div>
-
-                        <div className="flex items-center gap-1 opacity-90 sm:opacity-0 group-hover:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            onClick={() => handleEditCommittee(com)}
-                            className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition"
-                            title={isRtl ? 'تعديل بيانات اللجنة' : 'Edit Committee'}
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteCommittee(com.id)}
-                            className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
-                            title={isRtl ? 'حذف اللجنة' : 'Delete'}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
+                  <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                    {/* Text section: spacious, full natural width */}
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-xs font-bold border border-white/20 text-blue-100">
+                        <HeartHandshake size={14} className="text-amber-300" />
+                        <span>{isRtl ? 'اللجان التنظيمية والفرق الميدانية' : 'Field Committees & Teams'}</span>
                       </div>
 
-                      {/* Head & Contact */}
-                      <div className="flex flex-wrap items-center gap-2.5 text-xs">
-                        <div className="flex items-center gap-1.5 bg-amber-50 text-amber-900 px-3 py-1.5 rounded-xl font-bold">
-                          <span>{isRtl ? 'المشرف:' : 'Head:'}</span>
-                          <span>{com.leader}</span>
-                        </div>
+                      <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-white leading-tight">
+                        <span>{isRtl ? 'إدارة اللجان والفرق الميدانية والمتطوعين' : 'Committees, Leads & Volunteers'}</span>
+                      </h3>
 
-                        {com.phone && (
-                          <a
-                            href={`tel:${com.phone}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="flex items-center gap-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-3 py-1.5 rounded-xl font-bold transition"
-                          >
-                            <Phone size={13} />
-                            <span dir="ltr">{com.phone}</span>
-                          </a>
-                        )}
-
-                        <div className="flex items-center gap-1 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl font-bold">
-                          <span>{comMembersCount > 0 ? `${comMembersCount} ${isRtl ? 'أعضاء مسجلين' : 'members'}` : `${com.volunteersCount || 0} ${isRtl ? 'متطوع' : 'volunteers'}`}</span>
-                        </div>
-                      </div>
-
-                      {/* Tasks Summary */}
-                      {comTasks.length > 0 && (
-                        <div className="space-y-1.5 pt-2 border-t border-gray-100 text-xs">
-                          <div className="flex items-center justify-between text-[11px] text-gray-500 font-bold">
-                            <span>{isRtl ? 'المهام الرئيسية:' : 'Key Tasks:'} ({comCompletedTasks}/{comTasks.length})</span>
-                            <span className="text-blue-600 group-hover:underline">
-                              {isRtl ? 'فتح صفحة اللجنة التفصيلية ←' : 'Open Workspace →'}
-                            </span>
-                          </div>
-                          <ul className="space-y-1 text-xs text-gray-600">
-                            {comTasks.slice(0, 2).map((t, i) => (
-                              <li key={i} className="flex items-start gap-2 truncate">
-                                <CheckCircle2 size={13} className={`shrink-0 mt-0.5 ${t.completed ? 'text-emerald-600' : 'text-gray-400'}`} />
-                                <span className={`truncate ${t.completed ? 'line-through text-gray-400' : ''}`}>
-                                  {t.text || t}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* Quick Portal & QR Action Strip */}
-                      <div
-                        className="pt-2 border-t border-gray-100 flex items-center justify-between gap-1 text-[11px]"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => handleCopyCommitteePortal(com)}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold transition"
-                          title="نسخ رابط البوابة الميدانية"
-                        >
-                          {copiedPortalFor === com.id ? (
-                            <Check size={13} className="text-emerald-600" />
-                          ) : (
-                            <Copy size={13} />
-                          )}
-                          <span>{copiedPortalFor === com.id ? (isRtl ? 'تم النسخ!' : 'Copied!') : (isRtl ? 'نسخ الرابط' : 'Copy Link')}</span>
-                        </button>
-
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenQrModal(com)}
-                            className="p-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 transition"
-                            title={isRtl ? 'رمز QR وبوابة اللجنة' : 'QR Code'}
-                          >
-                            <QrIcon size={14} />
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setPortalPreviewCommittee(com)}
-                            className="p-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-800 transition"
-                            title={isRtl ? 'معاينة بوابة الجوال' : 'Mobile Preview'}
-                          >
-                            <Eye size={14} />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Click invitation button */}
-                      <div className="pt-2 border-t border-gray-50 flex items-center justify-between text-xs font-black text-blue-700 group-hover:text-blue-900">
-                        <span>{isRtl ? 'إدارة الأعضاء وتصدير التقارير 📋' : 'Manage Members & Reports 📋'}</span>
-                        <ArrowRight size={14} className="rtl:rotate-180 transition transform group-hover:translate-x-1 rtl:group-hover:-translate-x-1" />
-                      </div>
+                      <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed max-w-3xl">
+                        {isRtl
+                          ? `توزيع المهام والمسؤولين والفرق الميدانية (${committees.length} لجان، و ${totalVolunteers} متطوع ميداني) لتنظيم استقبال الضيوف، إعداد الوليمة والشاهي، وتأمين ساحات الحفل. انقر على أي لجنة للدخول إلى صفحتها التفصيلية لإدارة الأعضاء وتصدير التقارير.`
+                          : `Organize field teams (${committees.length} committees, ${totalVolunteers} volunteers) to supervise guest reception, feast logistics, and venue order. Click any committee to manage details.`}
+                      </p>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+
+                    {/* Action Buttons: Compact, sleek, to the side */}
+                    <div className="flex flex-wrap sm:flex-nowrap lg:flex-wrap items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingCommittee(null);
+                          setFormDynamicTasks(['', '']);
+                          setShowAddCommitteeModal(true);
+                        }}
+                        className="flex items-center gap-1.5 px-3.5 py-2 sm:px-4 sm:py-2.5 bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-xl font-black text-xs sm:text-sm shadow-md transition whitespace-nowrap"
+                      >
+                        <Plus size={16} />
+                        <span>{isRtl ? '➕ إضافة لجنة' : 'Add Committee'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBulkExcelError('');
+                          setBulkExcelCommittees([]);
+                          setBulkExcelFileName('');
+                          setBulkExcelMode('append');
+                          setShowBulkImportCommitteesModal(true);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow-md transition border border-emerald-400/30 whitespace-nowrap"
+                      >
+                        <FileSpreadsheet size={15} />
+                        <span>{isRtl ? '📊 استيراد إكسل' : 'Import Excel'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleLoadDefaultCommittees(false)}
+                        className="flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 bg-white/15 hover:bg-white/25 text-white rounded-xl font-bold text-xs backdrop-blur-md border border-white/20 transition shadow-sm whitespace-nowrap"
+                        title={isRtl ? 'إدراج اللجان الـ 14 الافتراضية' : 'Load Default 14 Committees'}
+                      >
+                        <Sparkles size={15} className="text-amber-300" />
+                        <span>{isRtl ? '⚡ اللجان الافتراضية' : 'Defaults (14)'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Quick Stats Strip */}
+                  <div className="mt-5 pt-4 border-t border-white/20 flex flex-wrap items-center gap-2.5 text-xs font-bold text-blue-100">
+                    <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                      👥 <span>{isRtl ? 'إجمالي اللجان:' : 'Total Committees:'}</span>
+                      <strong className="text-white font-black">{committees.length}</strong>
+                    </span>
+                    <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                      🤝 <span>{isRtl ? 'المتطوعين الميدانيين:' : 'Volunteers:'}</span>
+                      <strong className="text-amber-300 font-black">{totalVolunteers}</strong>
+                    </span>
+                    <span className="bg-black/25 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                      📋 <span>{isRtl ? 'مشرفي اللجان المعينين:' : 'Assigned Leads:'}</span>
+                      <strong className="text-white font-black">{committees.filter((c) => c.leader).length}</strong>
+                    </span>
+                  </div>
+                </div>
+
+                {committees.length === 0 ? (
+                  <div className="bg-white p-10 sm:p-12 rounded-3xl border border-dashed border-gray-300 text-center text-gray-500 space-y-5">
+                    <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto shadow-xs">
+                      <HeartHandshake size={32} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <h4 className="font-black text-gray-800 text-lg">
+                        {isRtl ? 'لا توجد لجان ميدانية مسجلة حتى الآن' : 'No committees registered yet'}
+                      </h4>
+                      <p className="text-xs text-gray-500 max-w-md mx-auto leading-relaxed">
+                        {isRtl
+                          ? 'يمكنك بنقرة واحدة إدراج اللجان الميدانية الافتراضية الـ 14 (لجنة الصالة، العقد، السامان، توزيع العشاء، النظام، الفرش، الذبح، والمزيد) أو استيرادها مباشرة من ملف إكسل.'
+                          : 'Load the 14 default operational committees with one click, import them from an Excel sheet, or add them manually.'}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => handleLoadDefaultCommittees(true)}
+                        className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs sm:text-sm shadow-md transition"
+                      >
+                        <Sparkles size={18} />
+                        <span>{isRtl ? '⚡ إدراج اللجان الافتراضية الـ 14 الآن' : 'Load 14 Default Committees'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBulkExcelError('');
+                          setBulkExcelCommittees([]);
+                          setBulkExcelFileName('');
+                          setBulkExcelMode('append');
+                          setShowBulkImportCommitteesModal(true);
+                        }}
+                        className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm shadow-md transition"
+                      >
+                        <FileSpreadsheet size={18} />
+                        <span>{isRtl ? '📊 استيراد اللجان من إكسل / CSV' : 'Import from Excel / CSV'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingCommittee(null);
+                          setFormDynamicTasks(['', '']);
+                          setShowAddCommitteeModal(true);
+                        }}
+                        className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs sm:text-sm transition border border-gray-200"
+                      >
+                        <Plus size={16} />
+                        <span>{isRtl ? '➕ إضافة لجنة يدوياً' : 'Add Committee Manually'}</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {committees.map((com) => {
+                      const comMembersCount = (com.members || []).length;
+                      const comTasks = (com.tasks && com.tasks.length > 0)
+                        ? com.tasks
+                        : (com.responsibilities || []).map((r, i) => ({ id: `task-${i}`, text: r, completed: false }));
+                      const comCompletedTasks = comTasks.filter((t) => t.completed).length;
+
+                      return (
+                        <div
+                          key={com.id}
+                          onClick={() => setSelectedCommitteeId(com.id)}
+                          className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-sm hover:shadow-md hover:border-blue-400 transition space-y-4 relative group cursor-pointer"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h4 className="font-black text-base text-gray-900 group-hover:text-blue-700 transition">
+                                {com.name}
+                              </h4>
+                              <p className="text-xs text-gray-500">{com.nameEn}</p>
+                            </div>
+
+                            <div className="flex items-center gap-1 opacity-90 sm:opacity-0 group-hover:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                type="button"
+                                onClick={() => handleEditCommittee(com)}
+                                className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition"
+                                title={isRtl ? 'تعديل بيانات اللجنة' : 'Edit Committee'}
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCommittee(com.id)}
+                                className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
+                                title={isRtl ? 'حذف اللجنة' : 'Delete'}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Head & Contact */}
+                          <div className="flex flex-wrap items-center gap-2.5 text-xs">
+                            <div className="flex items-center gap-1.5 bg-amber-50 text-amber-900 px-3 py-1.5 rounded-xl font-bold">
+                              <span>{isRtl ? 'المشرف:' : 'Head:'}</span>
+                              <span>{com.leader}</span>
+                            </div>
+
+                            {com.phone && (
+                              <a
+                                href={`tel:${com.phone}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex items-center gap-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-3 py-1.5 rounded-xl font-bold transition"
+                              >
+                                <Phone size={13} />
+                                <span dir="ltr">{com.phone}</span>
+                              </a>
+                            )}
+
+                            <div className="flex items-center gap-1 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl font-bold">
+                              <span>{comMembersCount > 0 ? `${comMembersCount} ${isRtl ? 'أعضاء مسجلين' : 'members'}` : `${com.volunteersCount || 0} ${isRtl ? 'متطوع' : 'volunteers'}`}</span>
+                            </div>
+                          </div>
+
+                          {/* Tasks Summary */}
+                          {comTasks.length > 0 && (
+                            <div className="space-y-1.5 pt-2 border-t border-gray-100 text-xs">
+                              <div className="flex items-center justify-between text-[11px] text-gray-500 font-bold">
+                                <span>{isRtl ? 'المهام الرئيسية:' : 'Key Tasks:'} ({comCompletedTasks}/{comTasks.length})</span>
+                                <span className="text-blue-600 group-hover:underline">
+                                  {isRtl ? 'فتح صفحة اللجنة التفصيلية ←' : 'Open Workspace →'}
+                                </span>
+                              </div>
+                              <ul className="space-y-1 text-xs text-gray-600">
+                                {comTasks.slice(0, 2).map((t, i) => (
+                                  <li key={i} className="flex items-start gap-2 truncate">
+                                    <CheckCircle2 size={13} className={`shrink-0 mt-0.5 ${t.completed ? 'text-emerald-600' : 'text-gray-400'}`} />
+                                    <span className={`truncate ${t.completed ? 'line-through text-gray-400' : ''}`}>
+                                      {t.text || t}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {/* Quick Portal & QR Action Strip */}
+                          <div
+                            className="pt-2 border-t border-gray-100 flex items-center justify-between gap-1 text-[11px]"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleCopyCommitteePortal(com)}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold transition"
+                              title="نسخ رابط البوابة الميدانية"
+                            >
+                              {copiedPortalFor === com.id ? (
+                                <Check size={13} className="text-emerald-600" />
+                              ) : (
+                                <Copy size={13} />
+                              )}
+                              <span>{copiedPortalFor === com.id ? (isRtl ? 'تم النسخ!' : 'Copied!') : (isRtl ? 'نسخ الرابط' : 'Copy Link')}</span>
+                            </button>
+
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenQrModal(com)}
+                                className="p-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 transition"
+                                title={isRtl ? 'رمز QR وبوابة اللجنة' : 'QR Code'}
+                              >
+                                <QrIcon size={14} />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setPortalPreviewCommittee(com)}
+                                className="p-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-800 transition"
+                                title={isRtl ? 'معاينة بوابة الجوال' : 'Mobile Preview'}
+                              >
+                                <Eye size={14} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Click invitation button */}
+                          <div className="pt-2 border-t border-gray-50 flex items-center justify-between text-xs font-black text-blue-700 group-hover:text-blue-900">
+                            <span>{isRtl ? 'إدارة الأعضاء وتصدير التقارير 📋' : 'Manage Members & Reports 📋'}</span>
+                            <ArrowRight size={14} className="rtl:rotate-180 transition transform group-hover:translate-x-1 rtl:group-hover:-translate-x-1" />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
 
               </div>
             )}
@@ -2180,46 +3236,46 @@ export default function MassWeddingDashboard({
                   </div>
                 ) : (
                   sponsorships.map((sp) => (
-                  <div
-                    key={sp.id}
-                    className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-between gap-3 text-xs"
-                  >
-                    <div>
-                      <div className="font-bold text-gray-900 text-sm">{sp.sponsorName}</div>
-                      <div className="text-gray-500 text-xs flex items-center gap-2 mt-0.5">
-                        <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-bold">
-                          {sp.type}
-                        </span>
-                        <span>{sp.contact}</span>
+                    <div
+                      key={sp.id}
+                      className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div>
+                        <div className="font-bold text-gray-900 text-sm">{sp.sponsorName}</div>
+                        <div className="text-gray-500 text-xs flex items-center gap-2 mt-0.5">
+                          <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-bold">
+                            {sp.type}
+                          </span>
+                          <span>{sp.contact}</span>
+                        </div>
+                        {sp.notes && <p className="text-[11px] text-gray-400 mt-1 italic">{sp.notes}</p>}
                       </div>
-                      {sp.notes && <p className="text-[11px] text-gray-400 mt-1 italic">{sp.notes}</p>}
-                    </div>
 
-                    <div className="text-left rtl:text-right shrink-0 flex flex-col items-end">
-                      <div className="font-black text-emerald-700 text-sm">
-                        {sp.amount?.toLocaleString()} ر.ي
-                      </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <button
-                          type="button"
-                          onClick={() => handleEditSponsor(sp)}
-                          className="text-gray-500 hover:text-emerald-700 text-[11px] font-bold transition flex items-center gap-0.5"
-                        >
-                          <Edit2 size={12} />
-                          <span>{isRtl ? 'تعديل' : 'Edit'}</span>
-                        </button>
-                        <span className="text-gray-300">•</span>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteSponsor(sp.id)}
-                          className="text-gray-400 hover:text-rose-600 text-[11px] transition"
-                        >
-                          {isRtl ? 'حذف' : 'Remove'}
-                        </button>
+                      <div className="text-left rtl:text-right shrink-0 flex flex-col items-end">
+                        <div className="font-black text-emerald-700 text-sm">
+                          {sp.amount?.toLocaleString()} ر.ي
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleEditSponsor(sp)}
+                            className="text-gray-500 hover:text-emerald-700 text-[11px] font-bold transition flex items-center gap-0.5"
+                          >
+                            <Edit2 size={12} />
+                            <span>{isRtl ? 'تعديل' : 'Edit'}</span>
+                          </button>
+                          <span className="text-gray-300">•</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSponsor(sp.id)}
+                            className="text-gray-400 hover:text-rose-600 text-[11px] transition"
+                          >
+                            {isRtl ? 'حذف' : 'Remove'}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  ))
                 )}
               </div>
             </div>
@@ -2261,40 +3317,40 @@ export default function MassWeddingDashboard({
                   </div>
                 ) : (
                   expenses.map((exp) => (
-                  <div
-                    key={exp.id}
-                    className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-between gap-3 text-xs"
-                  >
-                    <div>
-                      <div className="font-bold text-gray-900 text-sm">{exp.item}</div>
-                      <span className="text-[11px] text-gray-400 font-semibold">{exp.category}</span>
-                    </div>
+                    <div
+                      key={exp.id}
+                      className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div>
+                        <div className="font-bold text-gray-900 text-sm">{exp.item}</div>
+                        <span className="text-[11px] text-gray-400 font-semibold">{exp.category}</span>
+                      </div>
 
-                    <div className="text-left rtl:text-right shrink-0 flex flex-col items-end">
-                      <div className="font-black text-rose-700 text-sm">
-                        {exp.amount?.toLocaleString()} ر.ي
-                      </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <button
-                          type="button"
-                          onClick={() => handleEditExpense(exp)}
-                          className="text-gray-500 hover:text-rose-700 text-[11px] font-bold transition flex items-center gap-0.5"
-                        >
-                          <Edit2 size={12} />
-                          <span>{isRtl ? 'تعديل' : 'Edit'}</span>
-                        </button>
-                        <span className="text-gray-300">•</span>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteExpense(exp.id)}
-                          className="text-gray-400 hover:text-rose-600 text-[11px] transition"
-                        >
-                          {isRtl ? 'حذف' : 'Remove'}
-                        </button>
+                      <div className="text-left rtl:text-right shrink-0 flex flex-col items-end">
+                        <div className="font-black text-rose-700 text-sm">
+                          {exp.amount?.toLocaleString()} ر.ي
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleEditExpense(exp)}
+                            className="text-gray-500 hover:text-rose-700 text-[11px] font-bold transition flex items-center gap-0.5"
+                          >
+                            <Edit2 size={12} />
+                            <span>{isRtl ? 'تعديل' : 'Edit'}</span>
+                          </button>
+                          <span className="text-gray-300">•</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteExpense(exp.id)}
+                            className="text-gray-400 hover:text-rose-600 text-[11px] transition"
+                          >
+                            {isRtl ? 'حذف' : 'Remove'}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  ))
                 )}
               </div>
             </div>
@@ -2364,95 +3420,95 @@ export default function MassWeddingDashboard({
 
           <div className="bg-white p-6 rounded-3xl border border-gray-200/80 shadow-sm space-y-6">
 
-          {schedule.length === 0 ? (
-            <div className="p-10 rounded-2xl bg-gray-50 border border-dashed border-gray-200 text-center text-gray-400 space-y-3">
-              <Calendar size={36} className="mx-auto text-gray-300" />
-              <p className="text-xs font-semibold">{isRtl ? 'لم تتم جدولة أي فعاليات مشتركة بعد' : 'No timeline events scheduled yet'}</p>
-              <button
-                type="button"
-                onClick={() => { setEditingScheduleItem(null); setShowScheduleModal(true); }}
-                className="text-xs text-amber-700 font-bold hover:underline"
-              >
-                {isRtl ? '+ إضافة أول فعالية في الجدول' : '+ Add First Event'}
-              </button>
-            </div>
-          ) : (
-            <div className="relative border-s-2 border-amber-200 ms-4 space-y-6">
-            {schedule.map((item, idx) => (
-              <div key={item.id} className="relative ms-6 space-y-1">
-                <span
-                  className={`absolute -start-9 top-1 flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white shadow-sm ${item.status === 'completed'
-                    ? 'bg-emerald-600'
-                    : item.status === 'ongoing'
-                      ? 'bg-amber-600 ring-4 ring-amber-100 animate-pulse'
-                      : 'bg-gray-400'
-                    }`}
+            {schedule.length === 0 ? (
+              <div className="p-10 rounded-2xl bg-gray-50 border border-dashed border-gray-200 text-center text-gray-400 space-y-3">
+                <Calendar size={36} className="mx-auto text-gray-300" />
+                <p className="text-xs font-semibold">{isRtl ? 'لم تتم جدولة أي فعاليات مشتركة بعد' : 'No timeline events scheduled yet'}</p>
+                <button
+                  type="button"
+                  onClick={() => { setEditingScheduleItem(null); setShowScheduleModal(true); }}
+                  className="text-xs text-amber-700 font-bold hover:underline"
                 >
-                  {idx + 1}
-                </span>
-
-                <div className="p-4 rounded-2xl bg-gray-50 border border-gray-100 hover:border-amber-200 transition space-y-2 relative group">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <span className="font-black text-amber-800 text-xs sm:text-sm bg-amber-100 px-3 py-1 rounded-xl w-fit">
-                      {item.time}
+                  {isRtl ? '+ إضافة أول فعالية في الجدول' : '+ Add First Event'}
+                </button>
+              </div>
+            ) : (
+              <div className="relative border-s-2 border-amber-200 ms-4 space-y-6">
+                {schedule.map((item, idx) => (
+                  <div key={item.id} className="relative ms-6 space-y-1">
+                    <span
+                      className={`absolute -start-9 top-1 flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white shadow-sm ${item.status === 'completed'
+                        ? 'bg-emerald-600'
+                        : item.status === 'ongoing'
+                          ? 'bg-amber-600 ring-4 ring-amber-100 animate-pulse'
+                          : 'bg-gray-400'
+                        }`}
+                    >
+                      {idx + 1}
                     </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleScheduleStatus(item.id)}
-                        className={`px-3 py-1 rounded-full text-xs font-bold transition w-fit ${item.status === 'completed'
-                          ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                          : item.status === 'ongoing'
-                            ? 'bg-amber-100 text-amber-800 hover:bg-amber-200 animate-pulse'
-                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                          }`}
-                      >
-                        {item.status === 'completed'
-                          ? isRtl ? 'تم بنجاح ✓' : 'Completed ✓'
-                          : item.status === 'ongoing'
-                            ? isRtl ? 'جاري الآن ⏳' : 'Ongoing ⏳'
-                            : isRtl ? 'قادم 🕒' : 'Upcoming 🕒'}
-                      </button>
 
-                      <button
-                        type="button"
-                        onClick={() => handleEditScheduleItem(item)}
-                        className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
-                        title={isRtl ? 'تعديل الفعالية' : 'Edit Event'}
-                      >
-                        <Edit2 size={15} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteScheduleItem(item.id)}
-                        className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                        title={isRtl ? 'حذف الفعالية' : 'Delete Event'}
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                    <div className="p-4 rounded-2xl bg-gray-50 border border-gray-100 hover:border-amber-200 transition space-y-2 relative group">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <span className="font-black text-amber-800 text-xs sm:text-sm bg-amber-100 px-3 py-1 rounded-xl w-fit">
+                          {item.time}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleScheduleStatus(item.id)}
+                            className={`px-3 py-1 rounded-full text-xs font-bold transition w-fit ${item.status === 'completed'
+                              ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                              : item.status === 'ongoing'
+                                ? 'bg-amber-100 text-amber-800 hover:bg-amber-200 animate-pulse'
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                              }`}
+                          >
+                            {item.status === 'completed'
+                              ? isRtl ? 'تم بنجاح ✓' : 'Completed ✓'
+                              : item.status === 'ongoing'
+                                ? isRtl ? 'جاري الآن ⏳' : 'Ongoing ⏳'
+                                : isRtl ? 'قادم 🕒' : 'Upcoming 🕒'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleEditScheduleItem(item)}
+                            className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
+                            title={isRtl ? 'تعديل الفعالية' : 'Edit Event'}
+                          >
+                            <Edit2 size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteScheduleItem(item.id)}
+                            className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                            title={isRtl ? 'حذف الفعالية' : 'Delete Event'}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <h4 className="font-black text-base text-gray-900">{item.title}</h4>
+
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <MapPin size={13} className="text-amber-600" />
+                          <span>{item.location}</span>
+                        </span>
+                        <span>•</span>
+                        <span className="flex items-center gap-1">
+                          <HeartHandshake size={13} className="text-amber-600" />
+                          <span>{item.coordinator}</span>
+                        </span>
+                      </div>
                     </div>
                   </div>
-
-                  <h4 className="font-black text-base text-gray-900">{item.title}</h4>
-
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
-                    <span className="flex items-center gap-1">
-                      <MapPin size={13} className="text-amber-600" />
-                      <span>{item.location}</span>
-                    </span>
-                    <span>•</span>
-                    <span className="flex items-center gap-1">
-                      <HeartHandshake size={13} className="text-amber-600" />
-                      <span>{item.coordinator}</span>
-                    </span>
-                  </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-          )}
+            )}
 
-        </div>
+          </div>
         </div>
       )}
 
@@ -2530,16 +3586,14 @@ export default function MassWeddingDashboard({
                     key={tab.id}
                     type="button"
                     onClick={() => setSupplyCategoryFilter(tab.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 ${
-                      supplyCategoryFilter === tab.id
-                        ? 'bg-amber-600 text-white shadow-sm'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 ${supplyCategoryFilter === tab.id
+                      ? 'bg-amber-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
                   >
                     <span>{tab.label}</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-md ${
-                      supplyCategoryFilter === tab.id ? 'bg-amber-700 text-white' : 'bg-gray-200 text-gray-700'
-                    }`}>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-md ${supplyCategoryFilter === tab.id ? 'bg-amber-700 text-white' : 'bg-gray-200 text-gray-700'
+                      }`}>
                       {tab.count}
                     </span>
                   </button>
@@ -2639,59 +3693,59 @@ export default function MassWeddingDashboard({
                                 setEditingSupplyItem(item);
                                 setShowAddSupplyModal(true);
                               }}
-                            className="p-1 text-gray-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition"
-                            title={isRtl ? 'تعديل المادة' : 'Edit Item'}
-                          >
-                            <Edit2 size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteSupplyItem(item.id)}
-                            className="p-1 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition"
-                            title={isRtl ? 'حذف المادة' : 'Delete Item'}
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                              className="p-1 text-gray-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition"
+                              title={isRtl ? 'تعديل المادة' : 'Edit Item'}
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSupplyItem(item.id)}
+                              className="p-1 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition"
+                              title={isRtl ? 'حذف المادة' : 'Delete Item'}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+
+                        <h5 className="font-black text-sm text-gray-900">{item.name}</h5>
+
+                        {item.note && (
+                          <p className="text-[11px] text-gray-500 mt-1 italic leading-snug">{item.note}</p>
+                        )}
+                      </div>
+
+                      <div className="pt-2 border-t border-gray-200/60 flex items-center justify-between">
+                        <div className="text-[11px] text-gray-500">
+                          {item.rateType === 'ratio'
+                            ? `${isRtl ? '1 لكل' : '1 per'} ${item.ratio} ${isRtl ? 'ضيف' : 'guests'}`
+                            : isRtl ? 'كمية مقطوعة ثابتة' : 'Fixed quantity'}
+                        </div>
+                        <div className="font-black text-sm sm:text-base text-gray-900 bg-white px-2.5 py-1 rounded-xl border border-gray-200 shadow-2xs">
+                          <span className="text-amber-700">{item.computedQuantity !== null && item.computedQuantity > 0 ? item.computedQuantity : '—'}</span>{' '}
+                          <span className="text-xs text-gray-600 font-bold">{item.unit}</span>
                         </div>
                       </div>
-
-                      <h5 className="font-black text-sm text-gray-900">{item.name}</h5>
-
-                      {item.note && (
-                        <p className="text-[11px] text-gray-500 mt-1 italic leading-snug">{item.note}</p>
-                      )}
                     </div>
+                  );
+                })}
 
-                    <div className="pt-2 border-t border-gray-200/60 flex items-center justify-between">
-                      <div className="text-[11px] text-gray-500">
-                        {item.rateType === 'ratio'
-                          ? `${isRtl ? '1 لكل' : '1 per'} ${item.ratio} ${isRtl ? 'ضيف' : 'guests'}`
-                          : isRtl ? 'كمية مقطوعة ثابتة' : 'Fixed quantity'}
-                      </div>
-                      <div className="font-black text-sm sm:text-base text-gray-900 bg-white px-2.5 py-1 rounded-xl border border-gray-200 shadow-2xs">
-                        <span className="text-amber-700">{item.computedQuantity !== null && item.computedQuantity > 0 ? item.computedQuantity : '—'}</span>{' '}
-                        <span className="text-xs text-gray-600 font-bold">{item.unit}</span>
-                      </div>
-                    </div>
+                {/* Dotted Quick Add Box */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingSupplyItem(null);
+                    setShowAddSupplyModal(true);
+                  }}
+                  className="p-5 rounded-2xl border-2 border-dashed border-gray-200 hover:border-amber-400 hover:bg-amber-50/50 text-gray-400 hover:text-amber-700 transition flex flex-col items-center justify-center gap-2 text-center group min-h-[110px]"
+                >
+                  <div className="w-8 h-8 rounded-full bg-gray-100 group-hover:bg-amber-100 flex items-center justify-center text-gray-500 group-hover:text-amber-700 transition">
+                    <Plus size={16} />
                   </div>
-                );
-              })}
-
-              {/* Dotted Quick Add Box */}
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingSupplyItem(null);
-                  setShowAddSupplyModal(true);
-                }}
-                className="p-5 rounded-2xl border-2 border-dashed border-gray-200 hover:border-amber-400 hover:bg-amber-50/50 text-gray-400 hover:text-amber-700 transition flex flex-col items-center justify-center gap-2 text-center group min-h-[110px]"
-              >
-                <div className="w-8 h-8 rounded-full bg-gray-100 group-hover:bg-amber-100 flex items-center justify-center text-gray-500 group-hover:text-amber-700 transition">
-                  <Plus size={16} />
-                </div>
-                <span className="text-xs font-black">{isRtl ? 'إضافة مادة أو مؤونة جديدة' : 'Add New Supply Item'}</span>
-              </button>
-            </div>
+                  <span className="text-xs font-black">{isRtl ? 'إضافة مادة أو مؤونة جديدة' : 'Add New Supply Item'}</span>
+                </button>
+              </div>
             )}
           </div>
 
@@ -2751,155 +3805,882 @@ export default function MassWeddingDashboard({
 
           <div className="bg-white p-6 rounded-3xl border border-gray-200/80 shadow-sm space-y-6">
 
-          <div className="flex gap-3">
-            <button
-              type="button"
-              disabled={isAiLoading}
-              onClick={handleRunAi}
-              className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-sm flex items-center justify-center gap-2 shadow-md transition disabled:opacity-50"
-            >
-              {isAiLoading ? (
-                <>
-                  <Loader2 size={18} className="animate-spin" />
-                  <span>{isRtl ? 'جاري الصياغة بالذكاء الاصطناعي...' : 'Generating...'}</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles size={18} />
-                  <span>{isRtl ? 'إنشاء النص الآن ✨' : 'Generate Now ✨'}</span>
-                </>
-              )}
-            </button>
-          </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={isAiLoading}
+                onClick={handleRunAi}
+                className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-sm flex items-center justify-center gap-2 shadow-md transition disabled:opacity-50"
+              >
+                {isAiLoading ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    <span>{isRtl ? 'جاري الصياغة بالذكاء الاصطناعي...' : 'Generating...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={18} />
+                    <span>{isRtl ? 'إنشاء النص الآن ✨' : 'Generate Now ✨'}</span>
+                  </>
+                )}
+              </button>
+            </div>
 
-          {aiOutput && (
-            <div className="bg-amber-50/50 border border-amber-200/80 rounded-2xl p-5 space-y-4 animate-in fade-in">
-              <div className="flex items-center justify-between text-xs font-bold text-amber-900 border-b border-amber-200/60 pb-2">
-                <span>{isRtl ? 'النص المقترح:' : 'Generated Content:'}</span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleCopyAi}
-                    className="flex items-center gap-1 px-3 py-1 bg-white hover:bg-amber-100 rounded-lg text-amber-800 transition border border-amber-200"
-                  >
-                    {copiedAi ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-                    <span>{copiedAi ? (isRtl ? 'تم النسخ!' : 'Copied!') : (isRtl ? 'نسخ' : 'Copy')}</span>
-                  </button>
+            {aiOutput && (
+              <div className="bg-amber-50/50 border border-amber-200/80 rounded-2xl p-5 space-y-4 animate-in fade-in">
+                <div className="flex items-center justify-between text-xs font-bold text-amber-900 border-b border-amber-200/60 pb-2">
+                  <span>{isRtl ? 'النص المقترح:' : 'Generated Content:'}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCopyAi}
+                      className="flex items-center gap-1 px-3 py-1 bg-white hover:bg-amber-100 rounded-lg text-amber-800 transition border border-amber-200"
+                    >
+                      {copiedAi ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                      <span>{copiedAi ? (isRtl ? 'تم النسخ!' : 'Copied!') : (isRtl ? 'نسخ' : 'Copy')}</span>
+                    </button>
 
-                  <a
-                    href={`https://wa.me/?text=${encodeURIComponent(aiOutput)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-white transition shadow-sm"
-                  >
-                    <Share2 size={14} />
-                    <span>{isRtl ? 'مشاركة عبر واتساب' : 'Share WhatsApp'}</span>
-                  </a>
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent(aiOutput)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-white transition shadow-sm"
+                    >
+                      <Share2 size={14} />
+                      <span>{isRtl ? 'مشاركة عبر واتساب' : 'Share WhatsApp'}</span>
+                    </a>
+                  </div>
+                </div>
+
+                <div className="whitespace-pre-wrap text-sm text-gray-800 font-medium leading-relaxed font-sans">
+                  {aiOutput}
                 </div>
               </div>
+            )}
 
-              <div className="whitespace-pre-wrap text-sm text-gray-800 font-medium leading-relaxed font-sans">
-                {aiOutput}
-              </div>
-            </div>
-          )}
-
-        </div>
+          </div>
         </div>
       )}
 
       {/* --- MODALS --- */}
 
-      {/* Modal 1: Add / Edit Couple */}
-      {showAddCoupleModal && (
+      {/* Modal 1: Add / Edit Groom */}
+      {showAddGroomModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-100 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black text-gray-900">
-                {editingCouple
-                  ? (isRtl ? 'تعديل بيانات العريس' : 'Edit Couple')
-                  : (isRtl ? 'تسجيل عريس جديد في العرس الجماعي' : 'Add New Couple')}
-              </h3>
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-amber-100 space-y-4 my-8">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-black">
+                  🤵
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-gray-900">
+                    {editingGroom
+                      ? (isRtl ? 'تعديل بيانات العريس' : 'Edit Groom')
+                      : (isRtl ? 'تسجيل عريس جديد في العرس الجماعي' : 'Register New Groom')}
+                  </h3>
+                  <p className="text-[11px] text-gray-500">
+                    {isRtl ? 'توثيق بيانات العريس وكوتة المعازيم والجاهزية الشرعية والطبية' : 'Groom details, guests quota and status'}
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => { setShowAddCoupleModal(false); setEditingCouple(null); }}
+                onClick={() => { setShowAddGroomModal(false); setEditingGroom(null); }}
                 className="p-1.5 text-gray-400 hover:text-gray-700 rounded-xl transition"
               >
                 <X size={18} />
               </button>
             </div>
+
             <form
-              key={editingCouple ? editingCouple.id : 'new-couple'}
+              key={editingGroom ? editingGroom.id : 'new-groom'}
               onSubmit={(e) => {
                 e.preventDefault();
                 const fd = new FormData(e.target);
-                handleSaveCouple({
-                  id: editingCouple?.id,
-                  groomName: fd.get('groomName'),
-                  brideName: fd.get('brideName'),
-                  tribe: fd.get('tribe') || 'آل...',
-                  area: fd.get('area') || weddingInfo.city,
+                handleSaveGroom({
+                  id: editingGroom?.id,
+                  name: fd.get('name'),
                   phone: fd.get('phone') || '',
+                  nationalId: fd.get('nationalId') || '',
+                  tribe: fd.get('tribe') || '',
+                  area: fd.get('area') || weddingInfo.city || '',
+                  guestQuota: Number(fd.get('guestQuota')) || 35,
                   medicalStatus: fd.get('medicalStatus'),
                   contractStatus: fd.get('contractStatus'),
-                  aidStatus: editingCouple?.aidStatus || 'processing',
-                  guestQuota: Number(fd.get('guestQuota')) || 35,
+                  aidStatus: fd.get('aidStatus'),
+                  partnerBrideName: fd.get('partnerBrideName') || '',
                   notes: fd.get('notes') || ''
                 });
               }}
-              className="space-y-3 text-xs"
+              className="space-y-3.5 text-xs max-h-[75vh] overflow-y-auto px-1"
             >
               <div>
-                <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'اسم العريس الرباعي' : 'Groom Name'}</label>
-                <input type="text" name="groomName" defaultValue={editingCouple?.groomName || ''} required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                <label className="block font-bold text-gray-700 mb-1">
+                  {isRtl ? 'اسم العريس الرباعي *' : 'Groom Full Name *'}
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  defaultValue={editingGroom?.name || ''}
+                  required
+                  placeholder={isRtl ? 'مثال: محمد عبدالله سالم باوزير' : 'e.g. Mohammed Abdullah'}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
               </div>
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'اسم العروس / العائلة' : 'Bride Family'}</label>
-                <input type="text" name="brideName" defaultValue={editingCouple?.brideName || ''} required placeholder="كريمة..." className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'القبيلة / العائلة' : 'Tribe / Family'}</label>
-                  <input type="text" name="tribe" defaultValue={editingCouple?.tribe || ''} required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                  <label className="block font-bold text-gray-700 mb-1">
+                    {isRtl ? 'رقم الهاتف / الواتساب' : 'Phone / WhatsApp'}
+                  </label>
+                  <input
+                    type="text"
+                    name="phone"
+                    defaultValue={editingGroom?.phone || ''}
+                    placeholder="77xxxxxxx"
+                    dir="ltr"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
                 </div>
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'المنطقة / الحي' : 'Area'}</label>
-                  <input type="text" name="area" defaultValue={editingCouple?.area || weddingInfo.city || ''} required className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                  <label className="block font-bold text-gray-700 mb-1">
+                    {isRtl ? 'الرقم الوطني / السجل المدني' : 'National ID'}
+                  </label>
+                  <input
+                    type="text"
+                    name="nationalId"
+                    defaultValue={editingGroom?.nationalId || ''}
+                    placeholder="080100xxxxx"
+                    dir="ltr"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'رقم الهاتف' : 'Phone'}</label>
-                  <input type="text" name="phone" defaultValue={editingCouple?.phone || ''} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5" dir="ltr" />
+                  <label className="block font-bold text-gray-700 mb-1">
+                    {isRtl ? 'القبيلة / اللقب' : 'Tribe / Family'}
+                  </label>
+                  <input
+                    type="text"
+                    name="tribe"
+                    defaultValue={editingGroom?.tribe || ''}
+                    placeholder={isRtl ? 'مثال: باوزير' : 'Tribe'}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
                 </div>
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'بطاقات الدعوة' : 'Invitations'}</label>
-                  <input type="number" name="guestQuota" defaultValue={editingCouple?.guestQuota || 35} min="5" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold" />
+                  <label className="block font-bold text-gray-700 mb-1">
+                    {isRtl ? 'المنطقة / الحي السكني' : 'Area / Residence'}
+                  </label>
+                  <input
+                    type="text"
+                    name="area"
+                    defaultValue={editingGroom?.area || weddingInfo.city || ''}
+                    placeholder={isRtl ? 'مثال: حي الروضة' : 'Area'}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">
+                    {isRtl ? 'كوتة بطاقات الدعوة المقررة' : 'Invitations Quota'}
+                  </label>
+                  <input
+                    type="number"
+                    name="guestQuota"
+                    defaultValue={editingGroom?.guestQuota !== undefined ? editingGroom.guestQuota : 35}
+                    min="1"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">
+                    {isRtl ? 'العروس المقترنة (اختياري)' : 'Partner Bride (Optional)'}
+                  </label>
+                  <input
+                    type="text"
+                    name="partnerBrideName"
+                    list="available-brides-list"
+                    defaultValue={editingGroom?.partnerBrideName || ''}
+                    placeholder={isRtl ? 'اختر أو اكتب اسم العروس...' : 'Bride name...'}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                  <datalist id="available-brides-list">
+                    {brides.map(b => (
+                      <option key={b.id} value={b.name}>{b.name} ({b.tribe || b.area})</option>
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'الفحص الطبي' : 'Medical'}</label>
-                  <select name="medicalStatus" defaultValue={editingCouple?.medicalStatus || 'completed'} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold">
-                    <option value="completed">{isRtl ? 'مكتمل ✓' : 'Completed'}</option>
-                    <option value="pending">{isRtl ? 'قيد الإجراء' : 'Pending'}</option>
+                  <select
+                    name="medicalStatus"
+                    defaultValue={editingGroom?.medicalStatus || 'completed'}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2 font-bold text-xs"
+                  >
+                    <option value="completed">{isRtl ? 'مكتمل ✓' : 'Done ✓'}</option>
+                    <option value="pending">{isRtl ? 'قيد الإجراء ⏳' : 'Pending'}</option>
                   </select>
                 </div>
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'عقد القران' : 'Contract'}</label>
-                  <select name="contractStatus" defaultValue={editingCouple?.contractStatus || 'completed'} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold">
-                    <option value="completed">{isRtl ? 'موثق ✓' : 'Completed'}</option>
-                    <option value="in_progress">{isRtl ? 'قيد التوثيق' : 'In Progress'}</option>
+                  <select
+                    name="contractStatus"
+                    defaultValue={editingGroom?.contractStatus || 'completed'}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2 font-bold text-xs"
+                  >
+                    <option value="completed">{isRtl ? 'موثق ✓' : 'Signed ✓'}</option>
+                    <option value="in_progress">{isRtl ? 'قيد التوثيق ⏳' : 'In Progress'}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'الكسوة والمنحة' : 'Grant/Aid'}</label>
+                  <select
+                    name="aidStatus"
+                    defaultValue={editingGroom?.aidStatus || 'processing'}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2 font-bold text-xs"
+                  >
+                    <option value="delivered">{isRtl ? 'مستلم 🎁' : 'Delivered'}</option>
+                    <option value="processing">{isRtl ? 'قيد التجهيز' : 'Processing'}</option>
                   </select>
                 </div>
               </div>
-              <div className="flex gap-2 pt-2">
-                <button type="button" onClick={() => { setShowAddCoupleModal(false); setEditingCouple(null); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 font-bold">{isRtl ? 'إلغاء' : 'Cancel'}</button>
-                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition">
-                  {editingCouple ? (isRtl ? 'حفظ التعديلات ✓' : 'Save Changes') : (isRtl ? 'حفظ العريس' : 'Save')}
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'ملاحظات إضافية' : 'Notes'}</label>
+                <textarea
+                  name="notes"
+                  defaultValue={editingGroom?.notes || ''}
+                  rows="2"
+                  placeholder={isRtl ? 'أي متطلبات أو بيانات خاصة بالعريس...' : 'Any additional notes...'}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                ></textarea>
+              </div>
+
+              <div className="flex gap-2 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => { setShowAddGroomModal(false); setEditingGroom(null); }}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-100 font-bold transition"
+                >
+                  {isRtl ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition shadow-md"
+                >
+                  {editingGroom ? (isRtl ? 'حفظ التعديلات ✓' : 'Save Changes') : (isRtl ? 'حفظ العريس في السجل' : 'Save Groom')}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 1.5: Add / Edit Bride */}
+      {showAddBrideModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-rose-100 space-y-4 my-8">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-800 flex items-center justify-center font-black">
+                  👰
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-gray-900">
+                    {editingBride
+                      ? (isRtl ? 'تعديل بيانات العروس' : 'Edit Bride')
+                      : (isRtl ? 'تسجيل عروس جديدة في العرس الجماعي' : 'Register New Bride')}
+                  </h3>
+                  <p className="text-[11px] text-gray-500">
+                    {isRtl ? 'توثيق بيانات العروس وولي الأمر وكوتة صالة النساء' : 'Bride & guardian details, women hall quota'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setShowAddBrideModal(false); setEditingBride(null); }}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-xl transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              key={editingBride ? editingBride.id : 'new-bride'}
+              onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.target);
+                handleSaveBride({
+                  id: editingBride?.id,
+                  name: fd.get('name'),
+                  guardianName: fd.get('guardianName') || '',
+                  guardianRelation: fd.get('guardianRelation') || 'أب',
+                  guardianPhone: fd.get('guardianPhone') || '',
+                  phone: fd.get('phone') || '',
+                  nationalId: fd.get('nationalId') || '',
+                  tribe: fd.get('tribe') || '',
+                  area: fd.get('area') || weddingInfo.city || '',
+                  guestQuota: Number(fd.get('guestQuota')) || 25,
+                  medicalStatus: fd.get('medicalStatus'),
+                  contractStatus: fd.get('contractStatus'),
+                  partnerGroomName: fd.get('partnerGroomName') || '',
+                  notes: fd.get('notes') || ''
+                });
+              }}
+              className="space-y-3.5 text-xs max-h-[75vh] overflow-y-auto px-1"
+            >
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">
+                  {isRtl ? 'اسم العروس الرباعي *' : 'Bride Full Name *'}
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  defaultValue={editingBride?.name || ''}
+                  required
+                  placeholder={isRtl ? 'مثال: فاطمة أحمد سعيد باوزير' : 'e.g. Fatima Ahmed'}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+
+              {/* Guardian Info Box */}
+              <div className="p-3 rounded-2xl bg-rose-50/60 border border-rose-200/80 space-y-2.5">
+                <span className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
+                  👨‍👧 {isRtl ? 'بيانات ولي الأمر الشرعي' : 'Legal Guardian Details'}
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="sm:col-span-2">
+                    <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'اسم ولي الأمر *' : 'Guardian Name *'}</label>
+                    <input
+                      type="text"
+                      name="guardianName"
+                      defaultValue={editingBride?.guardianName || ''}
+                      required
+                      placeholder={isRtl ? 'مثال: أحمد سعيد باوزير' : 'Guardian Name'}
+                      className="w-full bg-white border border-rose-200 rounded-xl p-2 font-bold focus:outline-none focus:ring-2 focus:ring-rose-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'صلة القرابة' : 'Relation'}</label>
+                    <select
+                      name="guardianRelation"
+                      defaultValue={editingBride?.guardianRelation || 'أب'}
+                      className="w-full bg-white border border-rose-200 rounded-xl p-2 font-bold focus:outline-none focus:ring-2 focus:ring-rose-500"
+                    >
+                      <option value="أب">{isRtl ? 'أب' : 'Father'}</option>
+                      <option value="أخ">{isRtl ? 'أخ' : 'Brother'}</option>
+                      <option value="عم">{isRtl ? 'عم' : 'Uncle (Paternal)'}</option>
+                      <option value="خال">{isRtl ? 'خال' : 'Uncle (Maternal)'}</option>
+                      <option value="جد">{isRtl ? 'جد' : 'Grandfather'}</option>
+                      <option value="وكيل شرعي">{isRtl ? 'وكيل شرعي' : 'Legal Attorney'}</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'رقم هاتف ولي الأمر' : 'Guardian Phone'}</label>
+                  <input
+                    type="text"
+                    name="guardianPhone"
+                    defaultValue={editingBride?.guardianPhone || ''}
+                    placeholder="77xxxxxxx"
+                    dir="ltr"
+                    className="w-full bg-white border border-rose-200 rounded-xl p-2 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">
+                    {isRtl ? 'رقم هاتف العروس (اختياري)' : 'Bride Phone (Optional)'}
+                  </label>
+                  <input
+                    type="text"
+                    name="phone"
+                    defaultValue={editingBride?.phone || ''}
+                    placeholder="77xxxxxxx"
+                    dir="ltr"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">
+                    {isRtl ? 'الرقم الوطني / السجل المدني' : 'National ID'}
+                  </label>
+                  <input
+                    type="text"
+                    name="nationalId"
+                    defaultValue={editingBride?.nationalId || ''}
+                    placeholder="080100xxxxx"
+                    dir="ltr"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">
+                    {isRtl ? 'القبيلة / اللقب' : 'Tribe / Family'}
+                  </label>
+                  <input
+                    type="text"
+                    name="tribe"
+                    defaultValue={editingBride?.tribe || ''}
+                    placeholder={isRtl ? 'مثال: باوزير' : 'Tribe'}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">
+                    {isRtl ? 'المنطقة / الحي السكني' : 'Area / Residence'}
+                  </label>
+                  <input
+                    type="text"
+                    name="area"
+                    defaultValue={editingBride?.area || weddingInfo.city || ''}
+                    placeholder={isRtl ? 'مثال: حي الروضة' : 'Area'}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">
+                    {isRtl ? 'كوتة صالة النساء المقررة' : 'Women Hall Quota'}
+                  </label>
+                  <input
+                    type="number"
+                    name="guestQuota"
+                    defaultValue={editingBride?.guestQuota !== undefined ? editingBride.guestQuota : 25}
+                    min="1"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">
+                    {isRtl ? 'العريس المقترن (اختياري)' : 'Partner Groom (Optional)'}
+                  </label>
+                  <input
+                    type="text"
+                    name="partnerGroomName"
+                    list="available-grooms-list"
+                    defaultValue={editingBride?.partnerGroomName || ''}
+                    placeholder={isRtl ? 'اختر أو اكتب اسم العريس...' : 'Groom name...'}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                  <datalist id="available-grooms-list">
+                    {grooms.map(g => (
+                      <option key={g.id} value={g.name}>{g.name} ({g.tribe || g.area})</option>
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'الفحص الطبي' : 'Medical'}</label>
+                  <select
+                    name="medicalStatus"
+                    defaultValue={editingBride?.medicalStatus || 'completed'}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2 font-bold text-xs"
+                  >
+                    <option value="completed">{isRtl ? 'مكتمل ✓' : 'Done ✓'}</option>
+                    <option value="pending">{isRtl ? 'قيد الإجراء ⏳' : 'Pending'}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'عقد القران' : 'Contract'}</label>
+                  <select
+                    name="contractStatus"
+                    defaultValue={editingBride?.contractStatus || 'completed'}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2 font-bold text-xs"
+                  >
+                    <option value="completed">{isRtl ? 'موثق ✓' : 'Signed ✓'}</option>
+                    <option value="in_progress">{isRtl ? 'قيد التوثيق ⏳' : 'In Progress'}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">{isRtl ? 'ملاحظات إضافية' : 'Notes'}</label>
+                <textarea
+                  name="notes"
+                  defaultValue={editingBride?.notes || ''}
+                  rows="2"
+                  placeholder={isRtl ? 'أي متطلبات أو ترتيبات خاصة بصالة النساء...' : 'Any additional notes...'}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                ></textarea>
+              </div>
+
+              <div className="flex gap-2 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => { setShowAddBrideModal(false); setEditingBride(null); }}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-100 font-bold transition"
+                >
+                  {isRtl ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold transition shadow-md"
+                >
+                  {editingBride ? (isRtl ? 'حفظ التعديلات ✓' : 'Save Changes') : (isRtl ? 'حفظ العروس في السجل' : 'Save Bride')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 1.6: Bulk Import Grooms from Excel */}
+      {showBulkImportGroomsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-amber-100 space-y-4 my-8">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center">
+                  <FileSpreadsheet size={22} />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-gray-900">
+                    {isRtl ? '📊 استيراد كشف العرسان من ملف إكسل / CSV' : 'Import Grooms from Excel / CSV'}
+                  </h3>
+                  <p className="text-[11px] text-gray-500">
+                    {isRtl ? 'يتعرف النظام تلقائياً على الأعمدة: الاسم، الهاتف، السجل المدني، كوتة المعازيم، الحالة' : 'Auto detects columns: name, phone, national ID, quota, statuses'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBulkImportGroomsModal(false);
+                  setBulkExcelGrooms([]);
+                  setBulkExcelGroomsFileName('');
+                  setBulkExcelGroomsError('');
+                }}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-xl transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Template Download Card */}
+            <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                  <FileSpreadsheet size={15} />
+                  <span>{isRtl ? 'نموذج إكسل القياسي المجهز للعرسان' : 'Standard Grooms Excel Template'}</span>
+                </span>
+                <p className="text-[11px] text-amber-800/80">
+                  {isRtl ? 'حمل النموذج معبأ بأمثلة توضيحية لملء بيانات العرسان بكل سهولة' : 'Download sample CSV formatted for instant import'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleDownloadGroomsSampleCsv}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-sm transition shrink-0"
+              >
+                <Download size={14} />
+                <span>{isRtl ? 'تحميل النموذج (.csv)' : 'Download Sample'}</span>
+              </button>
+            </div>
+
+            {/* File Upload Drop Area */}
+            <div className="border-2 border-dashed border-amber-300/80 rounded-2xl p-6 text-center hover:bg-amber-50/30 transition">
+              <input
+                type="file"
+                id="groomsExcelUpload"
+                accept=".xlsx, .xls, .csv"
+                onChange={handleBulkGroomsFileUpload}
+                className="hidden"
+              />
+              <label htmlFor="groomsExcelUpload" className="cursor-pointer space-y-2 block">
+                <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto">
+                  <UploadCloud size={24} />
+                </div>
+                <div className="text-xs font-bold text-gray-800">
+                  {bulkExcelGroomsFileName ? (
+                    <span className="text-amber-700">📄 {bulkExcelGroomsFileName}</span>
+                  ) : (
+                    <span>{isRtl ? 'انقر لاختيار ملف إكسل أو اسحبه إلى هنا' : 'Click to select or drag and drop Excel file'}</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  {isRtl ? 'يدعم ملفات (.xlsx, .xls, .csv)' : 'Supports .xlsx, .xls, .csv'}
+                </p>
+              </label>
+            </div>
+
+            {bulkExcelGroomsError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-bold flex items-center gap-2">
+                <AlertCircle size={16} />
+                <span>{bulkExcelGroomsError}</span>
+              </div>
+            )}
+
+            {/* Preview Section */}
+            {bulkExcelGrooms.length > 0 && (
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-emerald-700 flex items-center gap-1">
+                    <CheckCircle2 size={16} />
+                    <span>{isRtl ? `تم العثور على (${bulkExcelGrooms.length}) عريس جاهز للاستيراد:` : `Found (${bulkExcelGrooms.length}) grooms:`}</span>
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <label className="text-[11px] font-bold text-gray-600">{isRtl ? 'طريقة الإدراج:' : 'Import Mode:'}</label>
+                    <select
+                      value={bulkExcelGroomsMode}
+                      onChange={(e) => setBulkExcelGroomsMode(e.target.value)}
+                      className="bg-gray-100 border border-gray-300 rounded-lg px-2 py-1 text-[11px] font-bold"
+                    >
+                      <option value="append">{isRtl ? 'إلحاق بالسجل الحالي' : 'Append to existing'}</option>
+                      <option value="replace">{isRtl ? 'استبدال السجل بالكامل' : 'Replace all'}</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-xl divide-y divide-gray-100 text-xs">
+                  {bulkExcelGrooms.slice(0, 10).map((g, idx) => (
+                    <div key={idx} className="p-2.5 flex items-center justify-between bg-white hover:bg-gray-50">
+                      <div>
+                        <span className="font-bold text-gray-900">{idx + 1}. {g.name}</span>
+                        <div className="text-[11px] text-gray-500 flex items-center gap-2">
+                          {g.phone && <span>📞 {g.phone}</span>}
+                          {g.tribe && <span>🏷️ {g.tribe}</span>}
+                          {g.area && <span>📍 {g.area}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 text-[10px]">
+                        <span className={`px-2 py-0.5 rounded font-bold ${g.medicalStatus === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'}`}>
+                          {g.medicalStatus === 'completed' ? 'فحص ✓' : 'فحص ⏳'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded font-bold ${g.contractStatus === 'completed' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}>
+                          {g.contractStatus === 'completed' ? 'عقد ✓' : 'عقد ⏳'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {bulkExcelGrooms.length > 10 && (
+                    <div className="p-2 text-center text-[11px] text-gray-400 font-bold bg-gray-50">
+                      + {bulkExcelGrooms.length - 10} {isRtl ? 'عريس إضافي في الملف' : 'more grooms'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-3 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBulkImportGroomsModal(false);
+                  setBulkExcelGrooms([]);
+                  setBulkExcelGroomsFileName('');
+                  setBulkExcelGroomsError('');
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-100 font-bold text-xs transition"
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                disabled={bulkExcelGrooms.length === 0}
+                onClick={handleConfirmBulkImportGrooms}
+                className={`flex-1 py-2.5 rounded-xl font-bold text-xs transition shadow-md flex items-center justify-center gap-1.5 ${bulkExcelGrooms.length > 0
+                  ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+              >
+                <Check size={16} />
+                <span>
+                  {bulkExcelGrooms.length > 0
+                    ? (isRtl ? `تأكيد استيراد (${bulkExcelGrooms.length}) عريس` : `Confirm Import (${bulkExcelGrooms.length})`)
+                    : (isRtl ? 'اختر ملفاً أولاً' : 'Select a file')}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 1.7: Bulk Import Brides from Excel */}
+      {showBulkImportBridesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-rose-100 space-y-4 my-8">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-800 flex items-center justify-center">
+                  <FileSpreadsheet size={22} />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-gray-900">
+                    {isRtl ? '📊 استيراد كشف العرائس من ملف إكسل / CSV' : 'Import Brides from Excel / CSV'}
+                  </h3>
+                  <p className="text-[11px] text-gray-500">
+                    {isRtl ? 'يتعرف النظام تلقائياً على: اسم العروس، ولي الأمر، صلة القرابة، الهاتف، كوتة الصالة' : 'Auto detects: bride name, guardian, relation, phone, hall quota'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBulkImportBridesModal(false);
+                  setBulkExcelBrides([]);
+                  setBulkExcelBridesFileName('');
+                  setBulkExcelBridesError('');
+                }}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-xl transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Template Download Card */}
+            <div className="bg-rose-50/70 border border-rose-200/80 rounded-2xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <span className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
+                  <FileSpreadsheet size={15} />
+                  <span>{isRtl ? 'نموذج إكسل القياسي المجهز للعرائس' : 'Standard Brides Excel Template'}</span>
+                </span>
+                <p className="text-[11px] text-rose-800/80">
+                  {isRtl ? 'حمل النموذج معبأ بأمثلة توضيحية لملء بيانات العرائس وأولياء الأمور' : 'Download sample CSV formatted for instant import'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleDownloadBridesSampleCsv}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm transition shrink-0"
+              >
+                <Download size={14} />
+                <span>{isRtl ? 'تحميل النموذج (.csv)' : 'Download Sample'}</span>
+              </button>
+            </div>
+
+            {/* File Upload Drop Area */}
+            <div className="border-2 border-dashed border-rose-300/80 rounded-2xl p-6 text-center hover:bg-rose-50/30 transition">
+              <input
+                type="file"
+                id="bridesExcelUpload"
+                accept=".xlsx, .xls, .csv"
+                onChange={handleBulkBridesFileUpload}
+                className="hidden"
+              />
+              <label htmlFor="bridesExcelUpload" className="cursor-pointer space-y-2 block">
+                <div className="w-12 h-12 bg-rose-100 text-rose-700 rounded-2xl flex items-center justify-center mx-auto">
+                  <UploadCloud size={24} />
+                </div>
+                <div className="text-xs font-bold text-gray-800">
+                  {bulkExcelBridesFileName ? (
+                    <span className="text-rose-700">📄 {bulkExcelBridesFileName}</span>
+                  ) : (
+                    <span>{isRtl ? 'انقر لاختيار ملف إكسل أو اسحبه إلى هنا' : 'Click to select or drag and drop Excel file'}</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  {isRtl ? 'يدعم ملفات (.xlsx, .xls, .csv)' : 'Supports .xlsx, .xls, .csv'}
+                </p>
+              </label>
+            </div>
+
+            {bulkExcelBridesError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-bold flex items-center gap-2">
+                <AlertCircle size={16} />
+                <span>{bulkExcelBridesError}</span>
+              </div>
+            )}
+
+            {/* Preview Section */}
+            {bulkExcelBrides.length > 0 && (
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-emerald-700 flex items-center gap-1">
+                    <CheckCircle2 size={16} />
+                    <span>{isRtl ? `تم العثور على (${bulkExcelBrides.length}) عروس جاهزة للاستيراد:` : `Found (${bulkExcelBrides.length}) brides:`}</span>
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <label className="text-[11px] font-bold text-gray-600">{isRtl ? 'طريقة الإدراج:' : 'Import Mode:'}</label>
+                    <select
+                      value={bulkExcelBridesMode}
+                      onChange={(e) => setBulkExcelBridesMode(e.target.value)}
+                      className="bg-gray-100 border border-gray-300 rounded-lg px-2 py-1 text-[11px] font-bold"
+                    >
+                      <option value="append">{isRtl ? 'إلحاق بالسجل الحالي' : 'Append to existing'}</option>
+                      <option value="replace">{isRtl ? 'استبدال السجل بالكامل' : 'Replace all'}</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-xl divide-y divide-gray-100 text-xs">
+                  {bulkExcelBrides.slice(0, 10).map((b, idx) => (
+                    <div key={idx} className="p-2.5 flex items-center justify-between bg-white hover:bg-gray-50">
+                      <div>
+                        <span className="font-bold text-gray-900">{idx + 1}. {b.name}</span>
+                        <div className="text-[11px] text-gray-500 flex items-center gap-2">
+                          {b.guardianName && <span>👨‍👧 {b.guardianName} ({b.guardianRelation})</span>}
+                          {b.guardianPhone && <span>📞 {b.guardianPhone}</span>}
+                          {b.area && <span>📍 {b.area}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 text-[10px]">
+                        <span className={`px-2 py-0.5 rounded font-bold ${b.medicalStatus === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'}`}>
+                          {b.medicalStatus === 'completed' ? 'فحص ✓' : 'فحص ⏳'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded font-bold ${b.contractStatus === 'completed' ? 'bg-rose-100 text-rose-800' : 'bg-gray-100 text-gray-600'}`}>
+                          {b.contractStatus === 'completed' ? 'عقد ✓' : 'عقد ⏳'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {bulkExcelBrides.length > 10 && (
+                    <div className="p-2 text-center text-[11px] text-gray-400 font-bold bg-gray-50">
+                      + {bulkExcelBrides.length - 10} {isRtl ? 'عروس إضافية في الملف' : 'more brides'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-3 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBulkImportBridesModal(false);
+                  setBulkExcelBrides([]);
+                  setBulkExcelBridesFileName('');
+                  setBulkExcelBridesError('');
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-100 font-bold text-xs transition"
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                disabled={bulkExcelBrides.length === 0}
+                onClick={handleConfirmBulkImportBrides}
+                className={`flex-1 py-2.5 rounded-xl font-bold text-xs transition shadow-md flex items-center justify-center gap-1.5 ${bulkExcelBrides.length > 0
+                  ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+              >
+                <Check size={16} />
+                <span>
+                  {bulkExcelBrides.length > 0
+                    ? (isRtl ? `تأكيد استيراد (${bulkExcelBrides.length}) عروس` : `Confirm Import (${bulkExcelBrides.length})`)
+                    : (isRtl ? 'اختر ملفاً أولاً' : 'Select a file')}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -3255,6 +5036,161 @@ export default function MassWeddingDashboard({
         );
       })()}
 
+      {/* Modal: Bulk Import Committees from Excel / CSV */}
+      {showBulkImportCommitteesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-emerald-100 space-y-4 my-8">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                  <FileSpreadsheet size={22} className="text-emerald-600" />
+                  <span>{isRtl ? 'استيراد اللجان الميدانية من ملف إكسل أو CSV' : 'Import Committees from Excel / CSV'}</span>
+                </h3>
+                <p className="text-xs text-gray-500 font-bold mt-0.5">
+                  {isRtl ? 'استيراد قائمة اللجان دفعة واحدة وإنشاء بطاقاتها في العرس الجماعي' : 'Bulk import committees list and create cards'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBulkImportCommitteesModal(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-xl transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Mode Selector: Append vs Replace */}
+            <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200 space-y-2">
+              <label className="text-xs font-black text-gray-700 block">
+                {isRtl ? 'طريقة الاستيراد والتعامل مع اللجان الحالية:' : 'Import Mode:'}
+              </label>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <label className={`p-2.5 rounded-xl border flex items-center gap-2 cursor-pointer transition ${bulkExcelMode === 'append' ? 'bg-emerald-50 border-emerald-300 font-black text-emerald-900' : 'bg-white border-gray-200 text-gray-600'
+                  }`}>
+                  <input
+                    type="radio"
+                    name="bulkExcelMode"
+                    value="append"
+                    checked={bulkExcelMode === 'append'}
+                    onChange={() => setBulkExcelMode('append')}
+                    className="text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span>{isRtl ? `إلحاق وإضافة (+${committees.length})` : 'Append (Keep existing)'}</span>
+                </label>
+
+                <label className={`p-2.5 rounded-xl border flex items-center gap-2 cursor-pointer transition ${bulkExcelMode === 'replace' ? 'bg-amber-50 border-amber-300 font-black text-amber-900' : 'bg-white border-gray-200 text-gray-600'
+                  }`}>
+                  <input
+                    type="radio"
+                    name="bulkExcelMode"
+                    value="replace"
+                    checked={bulkExcelMode === 'replace'}
+                    onChange={() => setBulkExcelMode('replace')}
+                    className="text-amber-600 focus:ring-amber-500"
+                  />
+                  <span>{isRtl ? 'استبدال الكل (Replace)' : 'Replace All'}</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Upload Drop Zone */}
+            <div className="border-2 border-dashed border-emerald-300 rounded-2xl p-6 bg-emerald-50/40 text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+                <UploadCloud size={24} />
+              </div>
+              <div>
+                <p className="text-xs font-black text-gray-900 mb-1">
+                  {isRtl ? 'اختر ملف إكسل (.xlsx, .xls) أو ملف (.csv)' : 'Select Excel (.xlsx, .xls) or .csv file'}
+                </p>
+                <p className="text-[11px] text-gray-500">
+                  {isRtl ? 'يتعرف النظام تلقائياً على أعمدة: اسم اللجنة، المشرف، الهاتف، وعدد المتطوعين' : 'Auto-detects: Committee Name, Leader, Phone, and Volunteers'}
+                </p>
+              </div>
+
+              <label className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs cursor-pointer shadow-sm transition">
+                <FileSpreadsheet size={15} />
+                <span>{bulkExcelFileName ? bulkExcelFileName : (isRtl ? 'تحديد الملف من جهازك' : 'Choose File')}</span>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleBulkExcelFileUpload}
+                  className="hidden"
+                />
+              </label>
+
+              {bulkExcelFileName && (
+                <p className="text-xs text-emerald-700 font-bold">
+                  ✓ {isRtl ? 'تم تحميل الملف:' : 'Selected:'} {bulkExcelFileName}
+                </p>
+              )}
+            </div>
+
+            {/* Sample Template Download */}
+            <div className="flex items-center justify-between text-xs bg-gray-50 p-3 rounded-xl border border-gray-200">
+              <span className="text-gray-600 font-bold">{isRtl ? 'بحاجة لنموذج جاهز للتعبئة؟' : 'Need a template file?'}</span>
+              <button
+                type="button"
+                onClick={handleDownloadBulkCommitteesSampleCsv}
+                className="text-emerald-700 hover:text-emerald-800 font-black flex items-center gap-1 hover:underline"
+              >
+                <Download size={13} />
+                <span>{isRtl ? 'تحميل نموذج اللجان (CSV)' : 'Download Template'}</span>
+              </button>
+            </div>
+
+            {bulkExcelError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2">
+                <AlertCircle size={15} className="shrink-0" />
+                <span>{bulkExcelError}</span>
+              </div>
+            )}
+
+            {/* Preview Table */}
+            {bulkExcelCommittees.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs font-black text-gray-900">
+                  <span>{isRtl ? 'معاينة اللجان المستخرجة:' : 'Extracted Committees Preview:'}</span>
+                  <span className="text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-lg">
+                    {isRtl ? `تم العثور على (${bulkExcelCommittees.length}) لجنة` : `${bulkExcelCommittees.length} committees found`}
+                  </span>
+                </div>
+
+                <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-xl divide-y divide-gray-100 text-xs">
+                  {bulkExcelCommittees.map((com, idx) => (
+                    <div key={idx} className="p-2.5 flex items-center justify-between gap-2 bg-white">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-gray-400 font-mono text-[10px] w-5">{idx + 1}.</span>
+                        <strong className="text-gray-900 truncate">{com.name}</strong>
+                        {com.leader && <span className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{com.leader}</span>}
+                      </div>
+                      {com.phone && <span className="font-mono text-gray-500 text-[11px]" dir="ltr">{com.phone}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setShowBulkImportCommitteesModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 transition"
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                disabled={bulkExcelCommittees.length === 0}
+                onClick={handleConfirmBulkImport}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-bold transition shadow-sm"
+              >
+                {isRtl ? `تأكيد واستيراد (${bulkExcelCommittees.length}) لجنة ✓` : `Import (${bulkExcelCommittees.length}) Committees ✓`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal: PDF Report & Printable Document */}
       {showPdfReportModal && selectedCommitteeId && (() => {
         const activeCom = committees.find((c) => c.id === selectedCommitteeId);
@@ -3269,7 +5205,7 @@ export default function MassWeddingDashboard({
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
             <div className="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-8 shadow-2xl border border-gray-200 space-y-6 my-8 max-h-[90vh] overflow-y-auto">
-              
+
               {/* Header Action Bar */}
               <div className="flex items-center justify-between gap-3 pb-4 border-b border-gray-200 print:hidden">
                 <div className="flex items-center gap-2">
@@ -3405,9 +5341,8 @@ export default function MassWeddingDashboard({
                             <td className="p-2.5 text-center font-bold text-gray-500">{idx + 1}</td>
                             <td className="p-2.5 font-bold text-gray-900">{t.text || t}</td>
                             <td className="p-2.5 text-center">
-                              <span className={`px-2 py-0.5 rounded font-black text-[10px] ${
-                                t.completed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                              }`}>
+                              <span className={`px-2 py-0.5 rounded font-black text-[10px] ${t.completed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                }`}>
                                 {t.completed ? (isRtl ? 'مكتملة ✓' : 'Done ✓') : (isRtl ? 'قيد التنفيذ' : 'Pending')}
                               </span>
                             </td>
