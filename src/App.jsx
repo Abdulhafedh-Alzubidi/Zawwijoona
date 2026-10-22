@@ -31,6 +31,11 @@ const serviceCategoriesMap = SERVICE_CATEGORIES.reduce((acc, cat) => {
   acc[cat.id] = cat;
   return acc;
 }, {});
+// --- Precompute Category Counts for Performance ---
+const templateCategoryCounts = SERVICE_TEMPLATES.reduce((acc, template) => {
+  acc[template.category] = (acc[template.category] || 0) + 1;
+  return acc;
+}, { 'all': SERVICE_TEMPLATES.length });
 
 // --- Gemini API Helper (Uses secure backend) ---
 const generateWithGemini = async (prompt) => {
@@ -1434,9 +1439,7 @@ export default function App() {
               <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
                 {SERVICE_CATEGORIES.map((cat) => {
                   const isActive = selectedServiceCategory === cat.id;
-                  const count = cat.id === 'all'
-                    ? SERVICE_TEMPLATES.length
-                    : SERVICE_TEMPLATES.filter((s) => s.category === cat.id).length;
+                  const count = templateCategoryCounts[cat.id] || 0;
 
                   return (
                     <button

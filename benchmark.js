@@ -1,33 +1,57 @@
-const lines = [];
-for (let i = 0; i < 100000; i++) {
-  lines.push('"hello", "world", "foo", "bar"');
-}
+import { performance } from 'perf_hooks';
 
-function runWithoutOptimization() {
-  const start = performance.now();
-  for (let i = 0; i < lines.length; i++) {
-    const currentLine = lines[i].split(',').map(val => val.trim().replace(/^"|"$/g, ''));
+// Simulate the imports
+const SERVICE_CATEGORIES = Array.from({ length: 10 }, (_, i) => ({ id: `cat_${i}` }));
+SERVICE_CATEGORIES.unshift({ id: 'all' });
+
+const SERVICE_TEMPLATES = Array.from({ length: 1000 }, (_, i) => ({
+  id: `temp_${i}`,
+  category: `cat_${i % 10}`
+}));
+
+function baseline() {
+  const result = [];
+  for (const cat of SERVICE_CATEGORIES) {
+    const count = cat.id === 'all'
+      ? SERVICE_TEMPLATES.length
+      : SERVICE_TEMPLATES.filter((s) => s.category === cat.id).length;
+    result.push({ id: cat.id, count });
   }
-  const end = performance.now();
-  return end - start;
+  return result;
 }
 
-function runWithOptimization() {
-  const start = performance.now();
-  const quoteRegex = /^"|"$/g;
-  for (let i = 0; i < lines.length; i++) {
-    const currentLine = lines[i].split(',').map(val => val.trim().replace(quoteRegex, ''));
+function optimized() {
+  const result = [];
+  // Precompute
+  const categoryCounts = { 'all': SERVICE_TEMPLATES.length };
+  for (let i = 0; i < SERVICE_TEMPLATES.length; i++) {
+    const cat = SERVICE_TEMPLATES[i].category;
+    categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
   }
-  const end = performance.now();
-  return end - start;
+
+  for (const cat of SERVICE_CATEGORIES) {
+    const count = categoryCounts[cat.id] || 0;
+    result.push({ id: cat.id, count });
+  }
+  return result;
 }
 
-let sumUnopt = 0;
-let sumOpt = 0;
-const runs = 10;
-for (let i = 0; i < runs; i++) {
-  sumUnopt += runWithoutOptimization();
-  sumOpt += runWithOptimization();
+const ITERATIONS = 10000;
+
+const startBaseline = performance.now();
+for (let i = 0; i < ITERATIONS; i++) {
+  baseline();
 }
-console.log(`Unoptimized average: ${(sumUnopt / runs).toFixed(2)}ms`);
-console.log(`Optimized average: ${(sumOpt / runs).toFixed(2)}ms`);
+const endBaseline = performance.now();
+const timeBaseline = endBaseline - startBaseline;
+console.log(`Baseline time: ${timeBaseline.toFixed(2)} ms`);
+
+const startOptimized = performance.now();
+for (let i = 0; i < ITERATIONS; i++) {
+  optimized();
+}
+const endOptimized = performance.now();
+const timeOptimized = endOptimized - startOptimized;
+console.log(`Optimized time: ${timeOptimized.toFixed(2)} ms`);
+
+console.log(`Improvement: ${((timeBaseline - timeOptimized) / timeBaseline * 100).toFixed(2)}%`);
