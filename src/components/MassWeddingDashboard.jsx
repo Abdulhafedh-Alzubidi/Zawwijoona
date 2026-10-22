@@ -1686,8 +1686,8 @@ export default function MassWeddingDashboard({
                 type="button"
                 onClick={() => setRosterSubTab('grooms')}
                 className={`flex items-center gap-2.5 px-4 sm:px-6 py-2.5 rounded-2xl font-black text-xs sm:text-sm transition ${rosterSubTab === 'grooms'
-                    ? 'bg-gradient-to-r from-amber-600 to-amber-700 text-white shadow-md'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  ? 'bg-gradient-to-r from-amber-600 to-amber-700 text-white shadow-md'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                   }`}
               >
                 <span>🤵 {isRtl ? 'سجل العرسان' : 'Grooms Roster'}</span>
@@ -1701,8 +1701,8 @@ export default function MassWeddingDashboard({
                 type="button"
                 onClick={() => setRosterSubTab('brides')}
                 className={`flex items-center gap-2.5 px-4 sm:px-6 py-2.5 rounded-2xl font-black text-xs sm:text-sm transition ${rosterSubTab === 'brides'
-                    ? 'bg-gradient-to-r from-rose-600 to-pink-700 text-white shadow-md'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  ? 'bg-gradient-to-r from-rose-600 to-pink-700 text-white shadow-md'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                   }`}
               >
                 <span>👰 {isRtl ? 'سجل العرائس' : 'Brides Roster'}</span>
@@ -1922,8 +1922,8 @@ export default function MassWeddingDashboard({
                         type="button"
                         onClick={() => handleToggleGroomStatus(g.id, 'medicalStatus')}
                         className={`p-2 rounded-xl text-center font-bold transition flex flex-col items-center gap-1 ${g.medicalStatus === 'completed'
-                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                            : 'bg-amber-50 text-amber-800 border border-amber-200'
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : 'bg-amber-50 text-amber-800 border border-amber-200'
                           }`}
                       >
                         <span>{isRtl ? 'الفحص الطبي' : 'Medical Check'}</span>
@@ -1937,8 +1937,8 @@ export default function MassWeddingDashboard({
                         type="button"
                         onClick={() => handleToggleGroomStatus(g.id, 'contractStatus')}
                         className={`p-2 rounded-xl text-center font-bold transition flex flex-col items-center gap-1 ${g.contractStatus === 'completed'
-                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                            : 'bg-amber-50 text-amber-800 border border-amber-200'
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : 'bg-amber-50 text-amber-800 border border-amber-200'
                           }`}
                       >
                         <span>{isRtl ? 'عقد القران' : 'Marriage Contract'}</span>
@@ -1952,8 +1952,8 @@ export default function MassWeddingDashboard({
                         type="button"
                         onClick={() => handleToggleGroomStatus(g.id, 'aidStatus')}
                         className={`p-2 rounded-xl text-center font-bold transition flex flex-col items-center gap-1 ${g.aidStatus === 'delivered'
-                            ? 'bg-purple-50 text-purple-800 border border-purple-200'
-                            : 'bg-gray-100 text-gray-700'
+                          ? 'bg-purple-50 text-purple-800 border border-purple-200'
+                          : 'bg-gray-100 text-gray-700'
                           }`}
                       >
                         <span>{isRtl ? 'الكسوة والمنحة' : 'Groom Aid'}</span>
@@ -2241,8 +2241,8 @@ export default function MassWeddingDashboard({
                         type="button"
                         onClick={() => handleToggleBrideStatus(b.id, 'medicalStatus')}
                         className={`p-2 rounded-xl text-center font-bold transition flex flex-col items-center gap-1 ${b.medicalStatus === 'completed'
-                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                            : 'bg-rose-50 text-rose-800 border border-rose-200'
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : 'bg-rose-50 text-rose-800 border border-rose-200'
                           }`}
                       >
                         <span>{isRtl ? 'الفحص الطبي' : 'Medical Check'}</span>
@@ -2256,8 +2256,8 @@ export default function MassWeddingDashboard({
                         type="button"
                         onClick={() => handleToggleBrideStatus(b.id, 'contractStatus')}
                         className={`p-2 rounded-xl text-center font-bold transition flex flex-col items-center gap-1 ${b.contractStatus === 'completed'
-                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                            : 'bg-amber-50 text-amber-800 border border-amber-200'
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : 'bg-amber-50 text-amber-800 border border-amber-200'
                           }`}
                       >
                         <span>{isRtl ? 'عقد القران' : 'Marriage Contract'}</span>
@@ -2813,8 +2813,8 @@ export default function MassWeddingDashboard({
                 type="button"
                 onClick={() => setCommitteesSectionView('list')}
                 className={`flex-1 py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition ${committeesSectionView === 'list'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-100'
                   }`}
               >
                 <HeartHandshake size={16} />
@@ -2825,8 +2825,8 @@ export default function MassWeddingDashboard({
                 type="button"
                 onClick={() => setCommitteesSectionView('broadcast')}
                 className={`flex-1 py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition ${committeesSectionView === 'broadcast'
-                    ? 'bg-emerald-700 text-white shadow-sm'
-                    : 'text-emerald-900 bg-emerald-50/70 hover:bg-emerald-100/70'
+                  ? 'bg-emerald-700 text-white shadow-sm'
+                  : 'text-emerald-900 bg-emerald-50/70 hover:bg-emerald-100/70'
                   }`}
               >
                 <Radio size={16} className={committeesSectionView === 'broadcast' ? 'animate-pulse' : ''} />
@@ -3587,8 +3587,8 @@ export default function MassWeddingDashboard({
                     type="button"
                     onClick={() => setSupplyCategoryFilter(tab.id)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 ${supplyCategoryFilter === tab.id
-                        ? 'bg-amber-600 text-white shadow-sm'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      ? 'bg-amber-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                   >
                     <span>{tab.label}</span>
@@ -4498,8 +4498,8 @@ export default function MassWeddingDashboard({
                 disabled={bulkExcelGrooms.length === 0}
                 onClick={handleConfirmBulkImportGrooms}
                 className={`flex-1 py-2.5 rounded-xl font-bold text-xs transition shadow-md flex items-center justify-center gap-1.5 ${bulkExcelGrooms.length > 0
-                    ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
               >
                 <Check size={16} />
@@ -4669,8 +4669,8 @@ export default function MassWeddingDashboard({
                 disabled={bulkExcelBrides.length === 0}
                 onClick={handleConfirmBulkImportBrides}
                 className={`flex-1 py-2.5 rounded-xl font-bold text-xs transition shadow-md flex items-center justify-center gap-1.5 ${bulkExcelBrides.length > 0
-                    ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
               >
                 <Check size={16} />
