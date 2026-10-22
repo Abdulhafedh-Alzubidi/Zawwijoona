@@ -526,15 +526,15 @@ export default function CommitteePortalView({
                 <CheckCircle2 size={18} />
               </div>
               <div>
-                <h4 className="text-xs font-black text-gray-900">مهام وتكليفات اللجنة</h4>
+                <h4 className="text-xs font-black text-gray-900">مهام وتكليفات اللجنة المعتمدة</h4>
                 <p className="text-[10px] text-gray-500">
-                  {completedCount} من {localTasks.length} مهام مكتملة
+                  {completedCount} من {localTasks.length} مهام معتمدة
                 </p>
               </div>
             </div>
 
-            <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-xl">
-              {progressPct}%
+            <span className="text-[10px] font-black bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-xl">
+              توجيهات معتمدة
             </span>
           </div>
 
@@ -555,24 +555,18 @@ export default function CommitteePortalView({
               {localTasks.map((t, idx) => (
                 <div
                   key={t.id || idx}
-                  onClick={() => toggleTask(t.id)}
-                  className={`p-3 rounded-2xl border text-xs flex items-start gap-2.5 cursor-pointer transition select-none ${
+                  className={`p-3 rounded-2xl border text-xs flex items-start gap-2.5 select-none ${
                     t.completed
-                      ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900 line-through opacity-85'
-                      : 'bg-slate-50/60 border-slate-200 text-slate-800 hover:bg-slate-100'
+                      ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
+                      : 'bg-slate-50/70 border-slate-200 text-slate-800'
                   }`}
                 >
-                  <button
-                    type="button"
-                    className="mt-0.5 shrink-0 text-emerald-600"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleTask(t.id);
-                    }}
-                  >
-                    {t.completed ? <CheckCircle2 size={16} /> : <Circle size={16} className="text-gray-400" />}
-                  </button>
-                  <span className="leading-relaxed font-bold">{t.text}</span>
+                  <div className="mt-0.5 shrink-0 text-emerald-600">
+                    {t.completed ? <CheckCircle2 size={16} /> : <Circle size={16} className="text-slate-400" />}
+                  </div>
+                  <span className={`leading-relaxed font-bold ${t.completed ? 'line-through text-emerald-800' : ''}`}>
+                    {t.text}
+                  </span>
                 </div>
               ))}
             </div>
