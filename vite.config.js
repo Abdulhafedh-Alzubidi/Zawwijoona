@@ -5,8 +5,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 export default defineConfig({
   test: {
     environment: 'jsdom',
+    setupFiles: ['./src/setupTests.js'],
     globals: true,
-    setupFiles: './src/setupTests.js',
   },
   plugins: [
     react(),
