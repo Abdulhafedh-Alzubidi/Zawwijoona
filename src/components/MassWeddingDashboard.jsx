@@ -204,6 +204,36 @@ export default function MassWeddingDashboard({
     return committees.reduce((sum, com) => sum + (Number(com.volunteersCount) || 0), 0);
   }, [committees]);
 
+  // --- Committee Detailed Memoized Computations ---
+  const activeCommittee = useMemo(() => {
+    return committees.find((c) => c.id === selectedCommitteeId);
+  }, [committees, selectedCommitteeId]);
+
+  const { comTasks, completedTasksCount, taskCompletionPct, comMembers } = useMemo(() => {
+    if (!selectedCommitteeId || !activeCommittee) {
+      return { comTasks: [], completedTasksCount: 0, taskCompletionPct: 0, comMembers: [] };
+    }
+    const tasks = (activeCommittee.tasks && activeCommittee.tasks.length > 0)
+      ? activeCommittee.tasks
+      : (activeCommittee.responsibilities || []).map((r, i) => ({ id: `task-${i}`, text: r, completed: false }));
+    const completed = tasks.filter((t) => t.completed).length;
+    const pct = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0;
+    const members = activeCommittee.members || [];
+    return { comTasks: tasks, completedTasksCount: completed, taskCompletionPct: pct, comMembers: members };
+  }, [selectedCommitteeId, activeCommittee]);
+
+  const filteredMembers = useMemo(() => {
+    return comMembers.filter((m) => {
+      if (!memberSearchQuery.trim()) return true;
+      const q = memberSearchQuery.toLowerCase();
+      return (
+        (m.name && m.name.toLowerCase().includes(q)) ||
+        (m.phone && m.phone.toLowerCase().includes(q)) ||
+        (m.role && m.role.toLowerCase().includes(q))
+      );
+    });
+  }, [comMembers, memberSearchQuery]);
+
   // Dynamic Logistics & Custom Rates Calculation
   const calculatorRates = useMemo(() => {
     return { ...DEFAULT_CALCULATOR_RATES, ...(data.calculatorSettings?.rates || {}) };
@@ -2293,26 +2323,8 @@ export default function MassWeddingDashboard({
 
       {/* === SUB-TAB 3: COMMITTEES & TEAMS === */}
       {activeSubTab === 'committees' && (() => {
-        const activeCommittee = committees.find((c) => c.id === selectedCommitteeId);
-
         // --- VIEW 1: DEDICATED COMMITTEE DETAIL PAGE ---
         if (selectedCommitteeId && activeCommittee) {
-          const comTasks = (activeCommittee.tasks && activeCommittee.tasks.length > 0)
-            ? activeCommittee.tasks
-            : (activeCommittee.responsibilities || []).map((r, i) => ({ id: `task-${i}`, text: r, completed: false }));
-          const completedTasksCount = comTasks.filter((t) => t.completed).length;
-          const taskCompletionPct = comTasks.length > 0 ? Math.round((completedTasksCount / comTasks.length) * 100) : 0;
-          const comMembers = activeCommittee.members || [];
-          const filteredMembers = comMembers.filter((m) => {
-            if (!memberSearchQuery.trim()) return true;
-            const q = memberSearchQuery.toLowerCase();
-            return (
-              (m.name && m.name.toLowerCase().includes(q)) ||
-              (m.phone && m.phone.toLowerCase().includes(q)) ||
-              (m.role && m.role.toLowerCase().includes(q))
-            );
-          });
-
           return (
             <div className="space-y-6">
 
