@@ -95,7 +95,165 @@ export const DEFAULT_CALCULATOR_RATES = {
 // مواد ومؤن افتراضية إضافية - فارغة تماماً لتبدأ من الصفر حسب إضافة المنظم
 export const DEFAULT_CUSTOM_LOGISTICS_ITEMS = [];
 
-// قالب العرس الجماعي النظيف الجديد (فارغ تماماً لبدء عرس جديد من الصفر)
+// اللجان الميدانية الافتراضية للعرس الجماعي (14 لجنة تنظيمية ميدانية)
+export const DEFAULT_MASS_WEDDING_COMMITTEES = [
+  {
+    id: "com-hall-women",
+    name: "لجنة الصالة (النساء)",
+    nameEn: "Women's Hall Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-saman-washing",
+    name: "لجنة السامان والتغسيل",
+    nameEn: "Supplies & Dishwashing Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-aqd",
+    name: "لجنة العقد",
+    nameEn: "Marriage Contract (Aqd) Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-dinner-distribution",
+    name: "لجنة توزيع العشاء",
+    nameEn: "Dinner Distribution Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-order-security",
+    name: "لجنة النظام",
+    nameEn: "Order & Protocol Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-carpets-venue",
+    name: "لجنة الفرش وساحة الزواج",
+    nameEn: "Carpets & Venue Setup Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-cold-water",
+    name: "لجنة الماء البارد",
+    nameEn: "Cold Water & Hydration Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-washbasins",
+    name: "لجنة المغاسيل",
+    nameEn: "Washing Stations Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-couples-care",
+    name: "لجنة العرسان",
+    nameEn: "Couples Care Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-slaughter-meat",
+    name: "لجنة الذبح واللحوم",
+    nameEn: "Slaughter & Meat Preparation Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-feast-cooking",
+    name: "لجنة طبخ الوليمة",
+    nameEn: "Feast Cooking Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-stage-av",
+    name: "لجنة المسرح وتجهيزه",
+    nameEn: "Stage & AV Setup Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-media",
+    name: "لجنة الاعلام",
+    nameEn: "Media & Coverage Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  },
+  {
+    id: "com-health-firstaid",
+    name: "لجنة الصحة والاسعاف",
+    nameEn: "Health & First Aid Committee",
+    leader: "",
+    phone: "",
+    volunteersCount: "",
+    responsibilities: [],
+    tasks: [],
+    members: []
+  }
+];
+
+// قالب العرس الجماعي النظيف الجديد
 export const DEFAULT_MASS_WEDDING_DATA = {
   info: {
     title: "",
@@ -116,7 +274,9 @@ export const DEFAULT_MASS_WEDDING_DATA = {
     isConfigured: false
   },
   couples: [],
-  committees: [],
+  grooms: [],
+  brides: [],
+  committees: DEFAULT_MASS_WEDDING_COMMITTEES.map(c => ({ ...c })),
   sponsorships: [],
   expenses: [],
   schedule: [],
@@ -126,7 +286,7 @@ export const DEFAULT_MASS_WEDDING_DATA = {
   }
 };
 
-// --- حاسبة التموين والوليمة الكبرى واللوجستيات (مبنية بدقة على حاصل جمع ضيوف العرسان) ---
+// --- حاسبة التموين والوليمة الكبرى واللوجستيات (مبنية بدقة على حاصل جمع ضيوف العرسان والعرائس) ---
 export function calculateMassWeddingLogistics(
   couplesOrCount,
   weddingInfo = {},
@@ -136,7 +296,7 @@ export function calculateMassWeddingLogistics(
   // دمج المعدلات المخصصة مع الافتراضية
   const rates = { ...DEFAULT_CALCULATOR_RATES, ...(customRates || {}) };
 
-  // 1. حساب إجمالي عدد الضيوف الفعلي عبر جمع كوتة كل عريس مسجل
+  // 1. حساب إجمالي عدد الضيوف الفعلي عبر جمع كوتة كل عريس وعروس مسجلين
   let couplesGuests = 0;
   let couplesCount = 0;
 
@@ -144,6 +304,32 @@ export function calculateMassWeddingLogistics(
     couplesCount = couplesOrCount.length;
     if (couplesCount > 0) {
       couplesGuests = couplesOrCount.reduce((sum, c) => {
+        const quota = c.guestQuota !== undefined && c.guestQuota !== '' && c.guestQuota !== null
+          ? Number(c.guestQuota)
+          : (Number(weddingInfo?.guestQuotaPerCouple) || 0);
+        return sum + (Number.isNaN(quota) ? 0 : quota);
+      }, 0);
+    } else if (weddingInfo?.targetCouples && weddingInfo?.guestQuotaPerCouple) {
+      couplesCount = Number(weddingInfo.targetCouples) || 0;
+      couplesGuests = (Number(weddingInfo.targetCouples) || 0) * (Number(weddingInfo.guestQuotaPerCouple) || 0);
+    }
+  } else if (couplesOrCount && typeof couplesOrCount === 'object' && (couplesOrCount.grooms || couplesOrCount.brides || couplesOrCount.couples)) {
+    const gList = couplesOrCount.grooms || [];
+    const bList = couplesOrCount.brides || [];
+    const legacyCouples = couplesOrCount.couples || [];
+
+    if (gList.length > 0 || bList.length > 0) {
+      couplesCount = Math.max(gList.length, bList.length);
+      const sumList = (list) => list.reduce((sum, item) => {
+        const q = item.guestQuota !== undefined && item.guestQuota !== '' && item.guestQuota !== null
+          ? Number(item.guestQuota)
+          : (Number(weddingInfo?.guestQuotaPerCouple) || 0);
+        return sum + (Number.isNaN(q) ? 0 : q);
+      }, 0);
+      couplesGuests = sumList(gList) + sumList(bList);
+    } else if (legacyCouples.length > 0) {
+      couplesCount = legacyCouples.length;
+      couplesGuests = legacyCouples.reduce((sum, c) => {
         const quota = c.guestQuota !== undefined && c.guestQuota !== '' && c.guestQuota !== null
           ? Number(c.guestQuota)
           : (Number(weddingInfo?.guestQuotaPerCouple) || 0);
