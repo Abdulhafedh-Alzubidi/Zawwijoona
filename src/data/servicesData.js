@@ -3,62 +3,61 @@
 
 export const SERVICE_CATEGORIES = [
   { id: 'all', icon: 'Sparkles', labelAr: 'كل الخدمات', labelEn: 'All Services' },
-  { id: 'venues', icon: 'Building2', labelAr: 'صالات وقاعات ومخادر', labelEn: 'Halls & Venues' },
+  { id: 'venues', icon: 'Building2', labelAr: 'صالات وقاعات ومسارح', labelEn: 'Halls, Venues & Theatres' },
   { id: 'decor', icon: 'Flower2', labelAr: 'كوش ومداخل وتنسيق', labelEn: 'Koshat & Decor' },
-  { id: 'sound_media', icon: 'Music', labelAr: 'صوتيات وإضاءة وشرح', labelEn: 'Sound & Media' },
-  { id: 'photography', icon: 'Camera', labelAr: 'تصوير وتوثيق فيديو', labelEn: 'Photography' },
-  { id: 'catering', icon: 'UtensilsCrossed', labelAr: 'ضيافة وولائم وبوفيه', labelEn: 'Catering & Banquets' },
+  { id: 'sound_media', icon: 'Music', labelAr: 'فرق شعبيّة، فنانين وصوتيات', labelEn: 'Folk Bands, Artists & Audio' },
+  { id: 'photography', icon: 'Camera', labelAr: 'استوديوهات تصوير ومصورات', labelEn: 'Photo Studios & Photographers' },
+  { id: 'catering', icon: 'UtensilsCrossed', labelAr: 'مطابخ ولائم وبوفيه ضيافة', labelEn: 'Banquets & Hospitality Buffets' },
+  { id: 'rentals', icon: 'Tent', labelAr: 'تأجير مستلزمات أفراح', labelEn: 'Wedding Rentals & Supplies' },
   { id: 'beauty', icon: 'Sparkles', labelAr: 'كوافير ومكياج ونقش', labelEn: 'Beauty & Henna' },
+  { id: 'groom_care', icon: 'Scissors', labelAr: 'حلاقة وتجهيز عرسان', labelEn: 'Groom Salons & Care' },
+  { id: 'invitations', icon: 'Mail', labelAr: 'بطاقات دعوة وطباعة', labelEn: 'Invitations & Print' },
+  { id: 'car_decor', icon: 'Car', labelAr: 'زينة سيارات ومواكب', labelEn: 'Car Decor' },
+  { id: 'furniture', icon: 'Bed', labelAr: 'أثاث وغرف نوم عرسان', labelEn: 'Wedding Furniture' },
 ];
 
 export const SERVICE_TEMPLATES = [
-  // 1. صالات وقاعات
+  // 1. صالات وقاعات ومسارح
   {
-    id: 'venue_1',
+    id: 'venue_grand_palace_tarim',
     category: 'venues',
-    nameAr: 'قاعة اللؤلؤة الملكية للمناسبات',
-    nameEn: 'Royal Pearl Grand Hall',
-    cityAr: 'المكلا - فوه',
-    cityEn: 'Mukalla - Fuwa',
-    descriptionAr: 'قاعة فخمة مكيفة بالكامل تتسع لـ 600 شخص، مجهزة بمدرج عرائس ملكي، أنظمة إضاءة ليزرية حديثة، غرف VIP منفصلة ومواقف واسعة للسيارات.',
-    descriptionEn: 'Grand air-conditioned hall with 600 guest capacity, royal bridal catwalk, advanced laser lighting, VIP dressing suites, and private parking.',
-    phone: '+967771234567',
-    whatsapp: '967771234567',
-    priceEstimateAr: 'تبدأ من 800,000 ريال يمني',
-    priceEstimateEn: 'Starting from 800,000 YER',
-    rating: 4.9,
-    badgeAr: 'الأكثر طلباً ⭐',
-    badgeEn: 'Popular ⭐',
+    nameAr: 'قصر المناسبات الكبرى',
+    nameEn: 'Grand Events Palace',
+    cityAr: 'تريم - منطقة حاي',
+    cityEn: 'Tarim - Hay Area',
+    descriptionAr: 'قصر فخم متكامل يضم قاعتين منفصلتين (قاعة للنساء وأخرى للرجال)، صالة طعام مستقلة، وجناحاً مكيفاً خاصاً بالعروس. مجهز بنظام تكييف مركزي متكامل، مولد كهربائي، ومواقف سيارات واسعة مع مرونة تامة لتجهيز الديكور الخاص وخدمات كادر الضيافة المباشرة.',
+    descriptionEn: 'A grand premier palace featuring dual separate halls for men and women, private banquet dining hall, and an air-conditioned bridal suite. Equipped with central AC, 24/7 backup power generator, vast parking, customizable decor setup, and full hospitality staffing.',
+    phone: '+967771012023',
+    whatsapp: '967771012023',
+    priceEstimateAr: '900,000 ريال يمني',
+    priceEstimateEn: '900,000 YER',
+    rating: 4.95,
+    badgeAr: 'سعة 1200 شخص 👑',
+    badgeEn: '1200 Capacity 👑',
     images: [
-      'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&w=800&q=80',
-      'https://images.unsplash.com/photo-1545232979-fbf68fe9ec40?auto=format&fit=crop&w=800&q=80',
-      'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?auto=format&fit=crop&w=800&q=80'
+      '/services/venues/Palace1.jpeg',
+      '/services/venues/Palace2.jpeg',
+      '/services/venues/Palace3.jpeg',
+      '/services/venues/Palace4.jpeg',
+      '/services/venues/Palace5.jpeg',
+      '/services/venues/Palace6.jpeg',
+      '/services/venues/Palace7.jpeg',
+      '/services/venues/Palace8.jpeg'
     ],
-    featuresAr: ['مولد كهربائي مركزي 24/7', 'طاقم ضيافة نسائي متخصص', 'شاشات عرض LED عملاقة'],
-    featuresEn: ['24/7 Central generator', 'Dedicated hospitality team', 'Giant LED screens']
-  },
-  {
-    id: 'venue_2',
-    category: 'venues',
-    nameAr: 'مخدرة وقاعة الف ليلة التراثية',
-    nameEn: 'Alf Leila Heritage Pavilion & Hall',
-    cityAr: 'سيئون - القرن',
-    cityEn: 'Seiyun - Al-Qarn',
-    descriptionAr: 'مخدرة تراثية مجهزة بطراز حضرمي أصيل مع جلسات عربية مريحة ومكيفات صحراوية وسقف تراثي مزخرف، مثالية لحراوة الزفاف وجلسات الشرح والسمرات.',
-    descriptionEn: 'Authentic Hadhrami style pavilion with traditional majlis seating, festive lighting, ideal for groom celebrations and heritage nights.',
-    phone: '+967772345678',
-    whatsapp: '967772345678',
-    priceEstimateAr: 'تبدأ من 450,000 ريال يمني',
-    priceEstimateEn: 'Starting from 450,000 YER',
-    rating: 4.8,
-    badgeAr: 'طابع تراثي حضرمي',
-    badgeEn: 'Heritage Pick',
-    images: [
-      'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=800&q=80',
-      'https://images.unsplash.com/photo-1520854221256-17451cc331bf?auto=format&fit=crop&w=800&q=80'
+    featuresAr: [
+      'سعة استيعابية ضخمة تصل إلى 1200 شخص (رجال ونساء)',
+      'تكييف مركزي متكامل + مولد كهربائي 24/7',
+      'قاعة للرجال + قاعة للنساء + صالة طعام مستقلة + غرفة مكيفة للعروس',
+      'مواقف سيارات واسعة وإمكانية تجهيز القاعة بديكورك الخاص',
+      'خدمات إضافية: كادر عمال وعاملات + ماء بارد + شاي بأنواعه للضيافة'
     ],
-    featuresAr: ['جلسات ومساند حضرمية فاخرة', 'تجهيزات صوتية متكاملة للدان', 'مساحة خارجية للوليمة'],
-    featuresEn: ['Luxury traditional floor seating', 'Full sound setup for Daan music', 'Outdoor banquet area']
+    featuresEn: [
+      'Massive 1,200 guest total capacity (men & women)',
+      'Integrated central AC + 24/7 backup power generator',
+      'Men hall + Women hall + Dining banquet hall + Bridal suite',
+      'Spacious parking lots & full decor customization',
+      'Hospitality staff, cold water & traditional tea catering services'
+    ]
   },
 
   // 2. كوش ومداخل وتنسيق
