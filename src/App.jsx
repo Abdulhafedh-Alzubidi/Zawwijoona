@@ -975,7 +975,8 @@ export default function App() {
           if (lines.length <= 1) return; // No data or just header
 
           // Get headers and normalize them
-          const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+          const quoteRegex = /^"|"$/g;
+          const headers = lines[0].split(',').map(h => h.trim().replace(quoteRegex, ''));
           const parsedGuests = [];
 
           // Smart finding of column indices based on common Arabic/English headers
@@ -987,7 +988,7 @@ export default function App() {
           const genderKey = headers.find(h => ['gender', 'Gender', 'النوع', 'الجنس', 'صفة الممثل'].includes(h));
 
           for (let i = 1; i < lines.length; i++) {
-            const currentLine = lines[i].split(',').map(val => val.trim().replace(/^"|"$/g, ''));
+            const currentLine = lines[i].split(',').map(val => val.trim().replace(quoteRegex, ''));
             if (currentLine.length === 0 || (currentLine.length === 1 && currentLine[0] === '')) continue;
 
             const row = {};
