@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import Auth from './Auth'; // استدعاء صفحة تسجيل الدخول
 import { auth, db } from './firebase'; // استدعاء إعدادات قاعدة البيانات
@@ -170,6 +170,7 @@ export default function App() {
 
   // 1. ALL HOOKS DECLARED AT THE TOP LEVEL
   const [lang, setLang] = useState('ar');
+  const isRtl = lang === 'ar';
   const [weddingMode, setWeddingMode] = useState(null); // 'individual' | 'mass' | null
   const [massWeddingData, setMassWeddingData] = useState(DEFAULT_MASS_WEDDING_DATA);
   const [showModeSelectorModal, setShowModeSelectorModal] = useState(false);
@@ -404,7 +405,7 @@ export default function App() {
     };
 
     fetchUserData();
-  }, [user]);
+  }, [user, isRtl]); // هذا القوس يعني: "شغّل هذا الكود كلما تغيرت حالة المستخدم (تسجيل دخول/خروج)"
 
   const handleSelectMode = async (mode) => {
     setWeddingMode(mode);
@@ -638,12 +639,17 @@ export default function App() {
   const [isChatLoading, setIsChatLoading] = useState(false);
 
   useEffect(() => {
-    setChatMessages([{ role: 'ai', text: lang === 'ar' ? 'حياكم الله وبياكم! أنا مساعدكم الحضرمي.. كيف أقدر أساعدكم اليوم في تجهيزات الزواج؟' : 'Welcome! I am your Hadhrami wedding assistant. How can I help you today?' }]);
+    let ignore = false;
+    setTimeout(() => {
+      if (!ignore) {
+        setChatMessages([{ role: 'ai', text: lang === 'ar' ? 'حياكم الله وبياكم! أنا مساعدكم الحضرمي.. كيف أقدر أساعدكم اليوم في تجهيزات الزواج؟' : 'Welcome! I am your Hadhrami wedding assistant. How can I help you today?' }]);
+      }
+    }, 0);
+    return () => { ignore = true; };
   }, [lang]);
 
   // 2. CONSTANTS AND UTILS
   const t = dict[lang];
-  const isRtl = lang === 'ar';
   const toggleLang = () => setLang(lang === 'ar' ? 'en' : 'ar');
   const daysLeft = couple.date ? Math.ceil((new Date(couple.date) - new Date()) / (1000 * 60 * 60 * 24)) : 0;
   const todayStr = new Date().toISOString().split('T')[0];
@@ -1195,7 +1201,6 @@ export default function App() {
   };
 
   const BudgetTab = () => {
-    const currentinitialBudget = Number(couple?.initialBudget) || 0;
     const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
     const totalIncomes = incomes.reduce((sum, inc) => sum + Number(inc.amount), 0);
     const remainingBudget = totalIncomes - totalExpenses;
